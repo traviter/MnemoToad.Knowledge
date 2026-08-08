@@ -210,6 +210,18 @@ Feature: KnowledgeNode API
     Then status 200
     And match response.attributes == {}
 
+  Scenario: Delete a knowledge node that still has attributes cascades and succeeds
+    * def nodeType = createNodeType()
+    * def created = createKnowledgeNode({ nodeTypeId: nodeType.response.id, attributes: { isoCode: 'FR' } })
+
+    Given path 'nodes', created.response.id
+    When method delete
+    Then status 204
+
+    Given path 'nodes', created.response.id
+    When method get
+    Then status 404
+
   Scenario: Reject update with a duplicate name for the same node type
     * def nodeType = createNodeType()
     * def name1 = uniqueName('KnowledgeNode')

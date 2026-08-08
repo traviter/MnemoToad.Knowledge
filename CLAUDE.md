@@ -629,14 +629,23 @@
     (surfacing as a raw 500) the moment a node being deleted still had any media attached — caught
     during manual testing, not by the SQLite-backed repository tests, since `AppDbContext` has no FK
     modeled at the EF level at all (see "Database" above) and SQLite's in-memory provider doesn't
-    enforce one either, so nothing in that layer could have caught it. `knowledge_node_attribute` has
-    the exact same gap (no `ON DELETE CASCADE`, same `ExecuteDeleteAsync` code path) and is not yet
-    fixed — deliberately out of scope here, tracked separately. No C# change was needed for the media
+    enforce one either, so nothing in that layer could have caught it. `knowledge_node_attribute` had
+    the exact same gap (no `ON DELETE CASCADE`, same `ExecuteDeleteAsync` code path) and has since
+    been fixed the same way: `fk_knowledge_node_attribute_knowledge_node_id` is now also
+    `ON DELETE CASCADE`. Unlike the media fix, this one was applied by editing
+    `010_CreateKnowledgeNodeAttributeTable.sql` in place rather than appending a new script — a
+    deliberate, one-off exception to the append-only rule (see "Database" above) that the user opted
+    into, accepting responsibility for dropping `knowledge_node_attribute` and clearing script `010`'s
+    DbUp journal entry on every already-migrated environment themselves. Don't treat this as a
+    precedent for future fixes; the default is still append-only. No C# change was needed for either
     fix — it's pure DDL, so `DeleteAsync` itself is untouched, and no NUnit repository test was added
     either: the whole reason the gap could exist undetected in that test layer is that DB-level
     FK/cascade behavior lives purely in the DbUp SQL and is invisible to the SQLite-backed provider
     (same limitation already documented for `CreatedUtc`/`ModifiedUtc` under "Karate tests" → "No
-    passthru" below) — only a real-Postgres Karate scenario can actually exercise it.
+    passthru" below) — only a real-Postgres Karate scenario can actually exercise it. Both cases are
+    covered by Karate scenarios: "Delete a knowledge node that still has media cascades and succeeds"
+    and "Delete a knowledge node that still has attributes cascades and succeeds"
+    (`knowledgenode.feature`).
   - **There is no nested `GET /nodes/{nodeId}/media` endpoint.** A `KnowledgeNodeMediaController`/
     `IKnowledgeNodeMediaRepository`/`KnowledgeNodeMediaRepository` briefly existed, structurally
     mirroring `KnowledgeNodeAttributesController`/`IKnowledgeNodeAttributeRepository`'s nested
