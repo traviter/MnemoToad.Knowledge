@@ -664,6 +664,25 @@
     to a 400 on violation — also removed (see the no-FK bullet above). None of that machinery exists
     anymore; `Metadata`/`JsonObject` is the whole story now.
 
+## API documentation (Swagger)
+- `<GenerateDocumentationFile>`/`<NoWarn>1591</NoWarn>` are set in both `MnemoToad.Knowledge.Api.csproj`
+  and `MnemoToad.Knowledge.Data.csproj` — the latter because entities (e.g. `NodeType`) are returned
+  directly as responses (no separate response DTOs, per "API patterns" above), so their property docs
+  have to come from `MnemoToad.Knowledge.Data`'s own XML file. `ServiceCollectionExtensions.cs` calls
+  `options.IncludeXmlComments(...)` for both assemblies' generated `.xml` files.
+- Sample request/response payloads come from `MnemoToad.Knowledge.Api/Swagger/ExampleSchemaFilter.cs`
+  — a single `ISchemaFilter` holding a `Type → example` map. Add an entry there for a new type;
+  deliberately not a per-DTO attribute/`IExamplesProvider<T>` class approach (no
+  `Swashbuckle.AspNetCore.Filters` dependency).
+- `Program.cs`'s `UseSwagger()`/`UseSwaggerUI()` run in every environment, not just Development —
+  reversed from the original Development-only gate, specifically so `MnemoToad.Platform`'s docs can
+  link straight to the deployed Azure app's `/swagger`. This means the full route/schema shape is
+  publicly visible once deployed.
+- **Only `NodeTypesController` (+ `NodeTypeRequest` + the `NodeType` entity) has XML doc comments,
+  `[ProducesResponseType]` attributes, and an example so far** — deliberately scoped as the reference
+  pattern for the other five controllers, not an oversight. Applying the same pattern to the rest is
+  a separate, not-yet-done pass.
+
 ## Testing (MnemoToad.Knowledge.Tests)
 - **NUnit + Moq**, not xUnit — a deliberate switch, not the default `dotnet new` choice, so don't
   drift back to xUnit conventions (`[Fact]`, `Assert.Equal`) in new test files. Use `[TestFixture]`/
