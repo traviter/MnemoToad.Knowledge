@@ -6,6 +6,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace MnemoToad.Knowledge.Api.Controllers;
 
+/// <summary>
+/// A KnowledgeNode is a single "thing" in the graph (e.g. "France", "Mercury"), classified by a
+/// NodeType, with scalar Attributes embedded directly and Media links keyed by name.
+/// </summary>
 [ApiController]
 [Route("nodes")]
 public class KnowledgeNodesController : ControllerBase
@@ -17,15 +21,40 @@ public class KnowledgeNodesController : ControllerBase
         _repository = repository;
     }
 
+    /// <summary>
+    /// Lists every KnowledgeNode of a given NodeType. List items omit <c>attributes</c>/<c>media</c>
+    /// entirely — use <c>GET /nodes/{id}</c> for a node's full attributes and media.
+    /// </summary>
+    /// <param name="nodeTypeId">The NodeType to filter by. Required — there is no unfiltered "list every node" call.</param>
+    /// <response code="200">The matching KnowledgeNodes, in no particular order.</response>
+    /// <response code="400"><c>nodeTypeId</c> was missing or not a valid GUID.</response>
     [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<KnowledgeNode>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAll([FromQuery, Required] Guid? nodeTypeId) =>
         Ok(await _repository.GetAllAsync(nodeTypeId!.Value));
 
+    /// <summary>Gets a single KnowledgeNode by id, including its full attributes and media.</summary>
+    /// <param name="id">The KnowledgeNode's id.</param>
+    /// <response code="200">The matching KnowledgeNode.</response>
+    /// <response code="404">No KnowledgeNode exists with that id.</response>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(KnowledgeNode), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id) =>
         await _repository.GetByIdAsync(id) is { } knowledgeNode ? Ok(knowledgeNode) : NotFound();
 
+    /// <summary>Creates a new KnowledgeNode, optionally with attributes and media in the same call.</summary>
+    /// <param name="request">The new KnowledgeNode's NodeType, name, description, attributes, and media.</param>
+    /// <response code="201">The created KnowledgeNode.</response>
+    /// <response code="400">
+    /// A required field was missing, <c>nodeTypeId</c> doesn't reference an existing NodeType, a
+    /// KnowledgeNode with the same NodeType and CanonicalName already exists, or a media entry was
+    /// missing a valid <c>id</c>/<c>alt_text</c>.
+    /// </response>
     [HttpPost]
+    [ProducesResponseType(typeof(KnowledgeNode), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(KnowledgeNodeRequest request)
     {
         try
@@ -46,7 +75,24 @@ public class KnowledgeNodesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Replaces an existing KnowledgeNode's name, description, attributes, and media.
+    /// <c>attributes</c>/<c>media</c> are a full replace, not a merge — a key present on the node
+    /// but absent from the request is removed.
+    /// </summary>
+    /// <param name="id">The KnowledgeNode's id.</param>
+    /// <param name="request">The KnowledgeNode's new NodeType, name, description, attributes, and media.</param>
+    /// <response code="200">The updated KnowledgeNode.</response>
+    /// <response code="400">
+    /// A required field was missing, <c>nodeTypeId</c> doesn't reference an existing NodeType,
+    /// another KnowledgeNode already has the same NodeType and CanonicalName, or a media entry was
+    /// missing a valid <c>id</c>/<c>alt_text</c>.
+    /// </response>
+    /// <response code="404">No KnowledgeNode exists with that id.</response>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(KnowledgeNode), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, KnowledgeNodeRequest request)
     {
         try
@@ -68,7 +114,20 @@ public class KnowledgeNodesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Deletes a KnowledgeNode. Its own attributes and media are deleted along with it (cascade);
+    /// KnowledgeRelations still pointing at it block the delete instead.
+    /// </summary>
+    /// <param name="id">The KnowledgeNode's id.</param>
+    /// <response code="204">The KnowledgeNode was deleted.</response>
+    /// <response code="400">
+    /// The KnowledgeNode is still referenced by one or more KnowledgeRelations and can't be deleted.
+    /// </response>
+    /// <response code="404">No KnowledgeNode exists with that id.</response>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id)
     {
         try

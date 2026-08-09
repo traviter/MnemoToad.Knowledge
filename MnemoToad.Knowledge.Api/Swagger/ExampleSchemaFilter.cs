@@ -25,6 +25,80 @@ public class ExampleSchemaFilter : ISchemaFilter
             ["name"] = "Planet",
             ["description"] = "A celestial body orbiting a star.",
         },
+        [typeof(RelationshipTypeRequest)] = () => new JsonObject
+        {
+            ["name"] = "capitalOf",
+            ["inverseName"] = "hasCapital",
+            ["description"] = "Links a capital city to the country it governs.",
+        },
+        [typeof(RelationshipType)] = () => new JsonObject
+        {
+            ["id"] = "6c9b2f2e-2a3d-4e33-9b0a-2f1a6d4c8e10",
+            ["name"] = "capitalOf",
+            ["inverseName"] = "hasCapital",
+            ["description"] = "Links a capital city to the country it governs.",
+        },
+        [typeof(KnowledgeNodeRequest)] = () => new JsonObject
+        {
+            ["nodeTypeId"] = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            ["canonicalName"] = "France",
+            ["description"] = "A country in Western Europe.",
+            ["attributes"] = new JsonObject
+            {
+                ["isoCode"] = "FR",
+                ["population"] = 68000000,
+            },
+            ["media"] = new JsonObject
+            {
+                ["flag"] = new JsonObject
+                {
+                    ["id"] = "a1b2c3d4-e5f6-4789-9abc-def012345678",
+                    ["alt_text"] = "The flag of France",
+                },
+            },
+        },
+        [typeof(KnowledgeNode)] = () => new JsonObject
+        {
+            ["id"] = "b2c3d4e5-f6a7-4890-9abc-def012345679",
+            ["nodeTypeId"] = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            ["canonicalName"] = "France",
+            ["description"] = "A country in Western Europe.",
+            ["attributes"] = new JsonObject
+            {
+                ["isoCode"] = "FR",
+                ["population"] = 68000000,
+            },
+            ["media"] = new JsonObject
+            {
+                ["flag"] = new JsonObject
+                {
+                    ["id"] = "a1b2c3d4-e5f6-4789-9abc-def012345678",
+                    ["alt_text"] = "The flag of France",
+                },
+            },
+        },
+        [typeof(KnowledgeRelationRequest)] = () => new JsonObject
+        {
+            ["sourceNodeId"] = "b2c3d4e5-f6a7-4890-9abc-def012345679",
+            ["relationshipTypeId"] = "6c9b2f2e-2a3d-4e33-9b0a-2f1a6d4c8e10",
+            ["targetNodeId"] = "c3d4e5f6-a7b8-4901-9abc-def01234567a",
+        },
+        [typeof(KnowledgeRelation)] = () => new JsonObject
+        {
+            ["id"] = "d4e5f6a7-b8c9-4012-9abc-def01234567b",
+            ["sourceNodeId"] = "b2c3d4e5-f6a7-4890-9abc-def012345679",
+            ["relationshipTypeId"] = "6c9b2f2e-2a3d-4e33-9b0a-2f1a6d4c8e10",
+            ["targetNodeId"] = "c3d4e5f6-a7b8-4901-9abc-def01234567a",
+        },
+        [typeof(MediaAssetRequest)] = () => new JsonObject
+        {
+            ["url"] = "https://flagcdn.com/fr.svg",
+        },
+        [typeof(MediaAsset)] = () => new JsonObject
+        {
+            ["id"] = "a1b2c3d4-e5f6-4789-9abc-def012345678",
+            ["url"] = "https://flagcdn.com/fr.svg",
+        },
     };
 
     public void Apply(IOpenApiSchema schema, SchemaFilterContext context)

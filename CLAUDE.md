@@ -678,10 +678,10 @@
   reversed from the original Development-only gate, specifically so `MnemoToad.Platform`'s docs can
   link straight to the deployed Azure app's `/swagger`. This means the full route/schema shape is
   publicly visible once deployed.
-- **Only `NodeTypesController` (+ `NodeTypeRequest` + the `NodeType` entity) has XML doc comments,
-  `[ProducesResponseType]` attributes, and an example so far** — deliberately scoped as the reference
-  pattern for the other five controllers, not an oversight. Applying the same pattern to the rest is
-  a separate, not-yet-done pass.
+- All six controllers (`Health`, `NodeTypes`, `RelationshipTypes`, `KnowledgeNodes`,
+  `KnowledgeRelations`, `MediaAssets`), their request contracts, and the entities returned directly
+  as responses now carry XML doc comments, `[ProducesResponseType]` attributes, and — for the
+  request/response types that aren't just an id/name pair — an `ExampleSchemaFilter` entry.
 
 ## Testing (MnemoToad.Knowledge.Tests)
 - **NUnit + Moq**, not xUnit — a deliberate switch, not the default `dotnet new` choice, so don't
