@@ -99,6 +99,67 @@ public class ExampleSchemaFilter : ISchemaFilter
             ["id"] = "a1b2c3d4-e5f6-4789-9abc-def012345678",
             ["url"] = "https://flagcdn.com/fr.svg",
         },
+        [typeof(List<ResolvePathsRequestItem>)] = () => new JsonArray
+        {
+            new JsonObject
+            {
+                ["nodeId"] = "b2c3d4e5-f6a7-4890-9abc-def012345679",
+                ["paths"] = new JsonArray { "_canonicalName", ".population", "#flag" },
+            },
+            new JsonObject
+            {
+                ["nodeId"] = "c3d4e5f6-a7b8-4901-9abc-def01234567a",
+                ["paths"] = new JsonArray { "#coatOfArms", ".gdp" },
+            },
+            new JsonObject
+            {
+                ["nodeId"] = "00000000-0000-0000-0000-000000000000",
+                ["paths"] = new JsonArray { "_canonicalName" },
+            },
+        },
+        [typeof(IEnumerable<ResolvedNodePaths>)] = () => new JsonArray
+        {
+            new JsonObject
+            {
+                ["nodeId"] = "b2c3d4e5-f6a7-4890-9abc-def012345679",
+                ["properties"] = new JsonObject
+                {
+                    ["_canonicalName"] = "France",
+                    [".population"] = 68000000,
+                    ["#flag"] = new JsonObject
+                    {
+                        ["id"] = "a1b2c3d4-e5f6-4789-9abc-def012345678",
+                        ["alt_text"] = "The flag of France",
+                    },
+                },
+            },
+            new JsonObject
+            {
+                ["nodeId"] = "c3d4e5f6-a7b8-4901-9abc-def01234567a",
+                ["properties"] = new JsonObject
+                {
+                    ["#coatOfArms"] = new JsonObject
+                    {
+                        ["id"] = "d4e5f6a7-b8c9-4012-9abc-def01234567b",
+                        ["alt_text"] = "The coat of arms of Paris",
+                        ["metadata"] = new JsonObject { ["credit"] = "Wikimedia Commons" },
+                    },
+                },
+                ["errors"] = new JsonObject
+                {
+                    [".gdp"] = "No attribute named 'gdp' on this node.",
+                },
+            },
+            new JsonObject
+            {
+                ["nodeId"] = "00000000-0000-0000-0000-000000000000",
+                ["properties"] = new JsonObject(),
+                ["errors"] = new JsonObject
+                {
+                    ["_canonicalName"] = "No KnowledgeNode exists with that id.",
+                },
+            },
+        },
     };
 
     public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
