@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi;
 using MnemoToad.Knowledge.Api.Json;
 using MnemoToad.Knowledge.Api.Swagger;
 using MnemoToad.Knowledge.Data;
@@ -19,23 +18,9 @@ public static class ServiceCollectionExtensions
         services.AddEndpointsApiExplorer();
         // Registers the OpenAPI document generator (built from the explorer data above).
         // Nothing is written to disk here — the JSON is generated in memory per-request by
-        // app.UseSwagger() below.
-        services.AddSwaggerGen(options =>
-        {
-            options.SwaggerDoc("v1", new OpenApiInfo
-            {
-                Title = "MnemoToad Knowledge API",
-                Version = "v1",
-                Description = "A ConceptNet-style graph of nodes, relationships, attributes, and media.",
-            });
-
-            // GenerateDocumentationFile in both this project and MnemoToad.Knowledge.Data (entities
-            // are returned directly as responses, no separate response DTOs) drives these files.
-            options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "MnemoToad.Knowledge.Api.xml"));
-            options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "MnemoToad.Knowledge.Data.xml"));
-
-            options.SchemaFilter<ExampleSchemaFilter>();
-        });
+        // app.UseSwagger() below. Configuration lives in SwaggerGenOptionsSetup.
+        services.ConfigureOptions<SwaggerGenOptionsSetup>();
+        services.AddSwaggerGen();
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("Default")).UseSnakeCaseNamingConvention());
