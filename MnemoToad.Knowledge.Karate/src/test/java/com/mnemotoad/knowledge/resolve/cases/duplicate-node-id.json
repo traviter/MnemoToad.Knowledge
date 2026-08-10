@@ -1,0 +1,10 @@
+{
+  "request": [
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "paths": ["_canonicalName"] },
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "paths": [".population"] }
+  ],
+  "response": [
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "properties": { "_canonicalName": "ZZ_Karate_Resolve_PrimaryNode" } },
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "properties": { ".population": 68000000 } }
+  ]
+}

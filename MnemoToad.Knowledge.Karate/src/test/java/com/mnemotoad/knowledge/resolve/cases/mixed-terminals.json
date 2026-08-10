@@ -1,0 +1,15 @@
+{
+  "request": [
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "paths": ["_canonicalName", ".population", "#flag"] }
+  ],
+  "response": [
+    {
+      "nodeId": "55555555-5555-5555-5555-555555555555",
+      "properties": {
+        "_canonicalName": "ZZ_Karate_Resolve_PrimaryNode",
+        ".population": 68000000,
+        "#flag": { "id": "33333333-3333-3333-3333-333333333333", "alt_text": "A flag" }
+      }
+    }
+  ]
+}
