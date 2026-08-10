@@ -1,0 +1,12 @@
+{
+  "request": [
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "paths": [">doesNotExist_canonicalName"] }
+  ],
+  "response": [
+    {
+      "nodeId": "55555555-5555-5555-5555-555555555555",
+      "properties": {},
+      "errors": { ">doesNotExist_canonicalName": "#string" }
+    }
+  ]
+}
