@@ -7,8 +7,8 @@
       "nodeId": "00000000-0000-0000-0000-000000000000",
       "properties": {},
       "errors": {
-        "_canonicalName": "#string",
-        ".population": "#string"
+        "_canonicalName": "No KnowledgeNode exists with that id.",
+        ".population": "No KnowledgeNode exists with that id."
       }
     }
   ]

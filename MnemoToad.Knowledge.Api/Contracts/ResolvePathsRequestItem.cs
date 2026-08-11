@@ -7,4 +7,4 @@ namespace MnemoToad.Knowledge.Api.Contracts;
 /// <param name="Paths">The Property Path DSL expressions to resolve. Must contain at least one. Required.</param>
 public record ResolvePathsRequestItem(
     [Required] Guid? NodeId,
-    [Required, MinLength(1)] List<string>? Paths);
+    [Required, MinLength(1), ValidPathExpression] List<string>? Paths);
