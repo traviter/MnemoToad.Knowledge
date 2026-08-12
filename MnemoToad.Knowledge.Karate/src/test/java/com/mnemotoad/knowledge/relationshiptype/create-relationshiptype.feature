@@ -5,8 +5,8 @@ Feature: Create a RelationshipType (reusable setup helper)
     * url baseUrl
 
   Scenario:
-    * def uniqueName = read('classpath:com/mnemotoad/knowledge/common/util.js')
-    * def name = karate.get('name') ? karate.get('name') : uniqueName('RelationshipType')
+    * def uniqueAlphaName = read('classpath:com/mnemotoad/knowledge/common/uniqueAlphaName.js')
+    * def name = karate.get('name') ? karate.get('name') : uniqueAlphaName('RelationshipType')
     * def inverseName = karate.get('inverseName')
     * def description = karate.get('description')
     Given path 'relationshipTypes'

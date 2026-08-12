@@ -84,6 +84,13 @@ Feature: KnowledgeNode API
     When method post
     Then status 400
 
+  Scenario: Reject creation with a non-alpha attribute key
+    * def nodeType = createNodeType()
+    Given path 'nodes'
+    And request { nodeTypeId: '#(nodeType.response.id)', canonicalName: '#(uniqueName("KnowledgeNode"))', attributes: { 'iso-code': 'FR' } }
+    When method post
+    Then status 400
+
   Scenario: Reject creation with a duplicate name for the same node type
     * def nodeType = createNodeType()
     * def name = uniqueName('KnowledgeNode')
@@ -314,6 +321,15 @@ Feature: KnowledgeNode API
 
     Given path 'nodes'
     And request { nodeTypeId: '#(nodeType.response.id)', canonicalName: '#(uniqueName("KnowledgeNode"))', media: { flag: { id: '#(mediaAsset.response.id)' } } }
+    When method post
+    Then status 400
+
+  Scenario: Reject creation with a non-alpha media key
+    * def nodeType = createNodeType()
+    * def mediaAsset = createMediaAsset()
+
+    Given path 'nodes'
+    And request { nodeTypeId: '#(nodeType.response.id)', canonicalName: '#(uniqueName("KnowledgeNode"))', media: { flag2: { id: '#(mediaAsset.response.id)', alt_text: 'x' } } }
     When method post
     Then status 400
 

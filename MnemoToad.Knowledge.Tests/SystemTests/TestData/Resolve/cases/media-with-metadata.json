@@ -1,0 +1,13 @@
+{
+  "request": [
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "paths": ["#coatOfArms"] }
+  ],
+  "response": [
+    {
+      "nodeId": "55555555-5555-5555-5555-555555555555",
+      "properties": {
+        "#coatOfArms": { "id": "44444444-4444-4444-4444-444444444444", "alt_text": "A coat of arms", "metadata": { "credit": "Wikimedia Commons" } }
+      }
+    }
+  ]
+}

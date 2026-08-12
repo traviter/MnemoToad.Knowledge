@@ -1,0 +1,15 @@
+{
+  "request": [
+    { "nodeId": "00000000-0000-0000-0000-000000000000", "paths": ["_canonicalName", ".population"] }
+  ],
+  "response": [
+    {
+      "nodeId": "00000000-0000-0000-0000-000000000000",
+      "properties": {},
+      "errors": {
+        "_canonicalName": "No KnowledgeNode exists with that id.",
+        ".population": "No KnowledgeNode exists with that id."
+      }
+    }
+  ]
+}

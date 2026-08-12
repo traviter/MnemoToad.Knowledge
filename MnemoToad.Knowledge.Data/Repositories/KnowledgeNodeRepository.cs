@@ -211,5 +211,21 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
         {
             throw new ValidationException("The specified MediaAsset is already linked to another KnowledgeNode.");
         }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.CheckViolation,
+            ConstraintName: "ck_knowledge_node_attribute_key"
+        })
+        {
+            throw new ValidationException("An attribute key must contain only letters.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.CheckViolation,
+            ConstraintName: "ck_knowledge_node_media_key"
+        })
+        {
+            throw new ValidationException("A media key must contain only letters.");
+        }
     }
 }

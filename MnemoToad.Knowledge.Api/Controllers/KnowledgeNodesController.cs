@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using MnemoToad.Knowledge.Api.Contracts;
 using MnemoToad.Knowledge.Data.Entities;
+using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.Repositories;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Nodes;
 
 namespace MnemoToad.Knowledge.Api.Controllers;
 
@@ -15,10 +17,12 @@ namespace MnemoToad.Knowledge.Api.Controllers;
 public class KnowledgeNodesController : ControllerBase
 {
     private readonly IKnowledgeNodeRepository _repository;
+    private readonly IPathResolutionRepository _pathResolutionRepository;
 
-    public KnowledgeNodesController(IKnowledgeNodeRepository repository)
+    public KnowledgeNodesController(IKnowledgeNodeRepository repository, IPathResolutionRepository pathResolutionRepository)
     {
         _repository = repository;
+        _pathResolutionRepository = pathResolutionRepository;
     }
 
     /// <summary>
@@ -138,5 +142,52 @@ public class KnowledgeNodesController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
+    }
+
+    /// <summary>
+    /// Resolves a batch of Property Path DSL expressions against KnowledgeNodes in one call. One
+    /// response entry per request entry, in request order — not deduped by nodeId, since the same
+    /// node can appear in more than one entry.
+    /// </summary>
+    /// <param name="items">The nodes and, for each, the paths to resolve against it.</param>
+    /// <response code="200">
+    /// One result per requested entry, in request order. <c>properties</c> holds the paths that
+    /// resolved — a scalar for a column/attribute path, an <c>{ id, alt_text, metadata }</c> object
+    /// for a media path. <c>errors</c> (omitted when empty) holds the paths that didn't — node not
+    /// found, a hop's relation doesn't exist, or the terminal's attribute/media key is missing —
+    /// with a message per path. A path appears in exactly one of the two. Partial failures never
+    /// fail the batch.
+    /// </response>
+    /// <response code="400">
+    /// The request array was missing/empty, an entry's <c>nodeId</c> was missing, <c>paths</c> was
+    /// missing/empty, or a path isn't valid Path DSL syntax.
+    /// </response>
+    [HttpPost("resolve")]
+    [ProducesResponseType(typeof(IEnumerable<ResolvedNodePaths>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Resolve([Required, MinLength(1)] List<ResolvePathsRequestItem>? items)
+    {
+        var queries = items!
+            .SelectMany(item => item.Paths!.Select(path => new PathResolutionQuery(item.NodeId!.Value, path)))
+            .ToList();
+        var resolved = await _pathResolutionRepository.ResolveAsync(queries);
+
+        var results = new List<ResolvedNodePaths>();
+        var cursor = 0;
+        foreach (var item in items!)
+        {
+            var properties = new Dictionary<string, JsonNode?>();
+            Dictionary<string, string>? errors = null;
+            foreach (var _ in item.Paths!)
+            {
+                var r = resolved[cursor++];
+                if (r.Error is not null)
+                    (errors ??= new())[r.Path] = r.Error;
+                else
+                    properties[r.Path] = r.Value;
+            }
+            results.Add(new ResolvedNodePaths(item.NodeId!.Value, properties, errors));
+        }
+        return Ok(results);
     }
 }

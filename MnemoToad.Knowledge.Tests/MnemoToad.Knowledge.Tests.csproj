@@ -24,4 +24,8 @@
     <ProjectReference Include="..\MnemoToad.Knowledge.Data\MnemoToad.Knowledge.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="SystemTests\TestData\Resolve\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

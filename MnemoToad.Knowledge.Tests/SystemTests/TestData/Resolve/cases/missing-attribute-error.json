@@ -1,0 +1,12 @@
+{
+  "request": [
+    { "nodeId": "55555555-5555-5555-5555-555555555555", "paths": [".population", ".gdp"] }
+  ],
+  "response": [
+    {
+      "nodeId": "55555555-5555-5555-5555-555555555555",
+      "properties": { ".population": 68000000 },
+      "errors": { ".gdp": "No attribute named 'gdp' on this node." }
+    }
+  ]
+}

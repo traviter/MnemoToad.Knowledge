@@ -435,4 +435,34 @@ public class KnowledgeNodeRepositoryTests
 
         Assert.That(ex!.Message, Is.EqualTo("The KnowledgeNode cannot be deleted because it is referenced by one or more KnowledgeRelations."));
     }
+
+    [Test]
+    public void CreateAsync_OnAttributeKeyCheckViolation_ThrowsValidationExceptionAboutLettersOnly()
+    {
+        _db.ThrowOnSaveChanges(PostgresExceptionFactory.CheckViolation(constraintName: "ck_knowledge_node_attribute_key"));
+
+        var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.CreateAsync(new KnowledgeNode
+        {
+            Id = Guid.NewGuid(),
+            CanonicalName = "Mercury",
+            Attributes = new Dictionary<string, JsonValue?> { ["iso-code"] = JsonValue.Create("FR") }
+        }));
+
+        Assert.That(ex!.Message, Is.EqualTo("An attribute key must contain only letters."));
+    }
+
+    [Test]
+    public void CreateAsync_OnMediaKeyCheckViolation_ThrowsValidationExceptionAboutLettersOnly()
+    {
+        _db.ThrowOnSaveChanges(PostgresExceptionFactory.CheckViolation(constraintName: "ck_knowledge_node_media_key"));
+
+        var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.CreateAsync(new KnowledgeNode
+        {
+            Id = Guid.NewGuid(),
+            CanonicalName = "Mercury",
+            Media = new Dictionary<string, JsonObject?> { ["flag2"] = MediaStanza(Guid.NewGuid(), "x") }
+        }));
+
+        Assert.That(ex!.Message, Is.EqualTo("A media key must contain only letters."));
+    }
 }

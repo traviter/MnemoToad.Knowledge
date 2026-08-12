@@ -3,6 +3,7 @@ using Moq;
 using MnemoToad.Knowledge.Api.Contracts;
 using MnemoToad.Knowledge.Api.Controllers;
 using MnemoToad.Knowledge.Data.Entities;
+using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.Repositories;
 using NUnit.Framework;
 using System.ComponentModel.DataAnnotations;
@@ -14,13 +15,15 @@ namespace MnemoToad.Knowledge.Tests.Controllers;
 public class KnowledgeNodesControllerTests
 {
     private Mock<IKnowledgeNodeRepository> _repository = null!;
+    private Mock<IPathResolutionRepository> _pathResolutionRepository = null!;
     private KnowledgeNodesController _controller = null!;
 
     [SetUp]
     public void SetUp()
     {
         _repository = new Mock<IKnowledgeNodeRepository>();
-        _controller = new KnowledgeNodesController(_repository.Object);
+        _pathResolutionRepository = new Mock<IPathResolutionRepository>();
+        _controller = new KnowledgeNodesController(_repository.Object, _pathResolutionRepository.Object);
     }
 
     [Test]
@@ -274,5 +277,64 @@ public class KnowledgeNodesControllerTests
         var problem = objectResult.Value as ProblemDetails;
         Assert.That(problem, Is.Not.Null);
         Assert.That(problem!.Detail, Is.EqualTo("The KnowledgeNode cannot be deleted because it is referenced by one or more KnowledgeRelations."));
+    }
+
+    [Test]
+    public async Task Resolve_SingleEntryWithMultiplePaths_ReturnsAllInProperties()
+    {
+        var nodeId = Guid.NewGuid();
+        _pathResolutionRepository.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()))
+            .ReturnsAsync((IReadOnlyList<PathResolutionQuery> queries) => queries
+                .Select(q => new ResolvedPath(q.NodeId, q.Path, JsonValue.Create($"value-for-{q.Path}"), null))
+                .ToList());
+
+        var result = await _controller.Resolve([new ResolvePathsRequestItem(nodeId, ["_canonicalName", ".population"])]);
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        var results = ok!.Value as List<ResolvedNodePaths>;
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results![0].NodeId, Is.EqualTo(nodeId));
+        Assert.That(results[0].Properties["_canonicalName"]!.GetValue<string>(), Is.EqualTo("value-for-_canonicalName"));
+        Assert.That(results[0].Properties[".population"]!.GetValue<string>(), Is.EqualTo("value-for-.population"));
+        Assert.That(results[0].Errors, Is.Null);
+    }
+
+    [Test]
+    public async Task Resolve_PathWithError_GoesToErrorsNotProperties()
+    {
+        var nodeId = Guid.NewGuid();
+        _pathResolutionRepository.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()))
+            .ReturnsAsync((IReadOnlyList<PathResolutionQuery> queries) => queries
+                .Select(q => new ResolvedPath(q.NodeId, q.Path, null, "No attribute named 'gdp' on this node."))
+                .ToList());
+
+        var result = await _controller.Resolve([new ResolvePathsRequestItem(nodeId, [".gdp"])]);
+
+        var results = (result as OkObjectResult)!.Value as List<ResolvedNodePaths>;
+        Assert.That(results![0].Properties, Is.Empty);
+        Assert.That(results[0].Errors, Is.Not.Null);
+        Assert.That(results[0].Errors![".gdp"], Is.EqualTo("No attribute named 'gdp' on this node."));
+    }
+
+    [Test]
+    public async Task Resolve_SameNodeIdInTwoEntries_ReturnsSeparateUnmergedResults()
+    {
+        var nodeId = Guid.NewGuid();
+        _pathResolutionRepository.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()))
+            .ReturnsAsync((IReadOnlyList<PathResolutionQuery> queries) => queries
+                .Select(q => new ResolvedPath(q.NodeId, q.Path, JsonValue.Create($"value-for-{q.Path}"), null))
+                .ToList());
+
+        var result = await _controller.Resolve(
+        [
+            new ResolvePathsRequestItem(nodeId, ["_canonicalName"]),
+            new ResolvePathsRequestItem(nodeId, [".population"])
+        ]);
+
+        var results = (result as OkObjectResult)!.Value as List<ResolvedNodePaths>;
+        Assert.That(results, Has.Count.EqualTo(2));
+        Assert.That(results![0].Properties.Keys, Is.EquivalentTo(new[] { "_canonicalName" }));
+        Assert.That(results[1].Properties.Keys, Is.EquivalentTo(new[] { ".population" }));
     }
 }
