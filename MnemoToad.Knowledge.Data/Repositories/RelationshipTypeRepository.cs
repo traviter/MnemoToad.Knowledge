@@ -68,5 +68,21 @@ public class RelationshipTypeRepository : IRelationshipTypeRepository
         {
             throw new ValidationException("A RelationshipType with that name already exists.");
         }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.CheckViolation,
+            ConstraintName: "ck_relationship_type_name"
+        })
+        {
+            throw new ValidationException("The RelationshipType Name must contain only letters.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.CheckViolation,
+            ConstraintName: "ck_relationship_type_inverse_name"
+        })
+        {
+            throw new ValidationException("The RelationshipType InverseName must contain only letters.");
+        }
     }
 }

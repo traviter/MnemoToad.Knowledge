@@ -139,4 +139,26 @@ public class RelationshipTypeRepositoryTests
 
         Assert.That(ex!.Message, Is.EqualTo("The RelationshipType cannot be deleted because it is referenced by one or more KnowledgeRelations."));
     }
+
+    [Test]
+    public void CreateAsync_OnNameCheckViolation_ThrowsValidationExceptionAboutLettersOnly()
+    {
+        _db.ThrowOnSaveChanges(PostgresExceptionFactory.CheckViolation(constraintName: "ck_relationship_type_name"));
+
+        var ex = Assert.ThrowsAsync<ValidationException>(
+            () => _repository.CreateAsync(new RelationshipType { Id = Guid.NewGuid(), Name = "hasCapital1" }));
+
+        Assert.That(ex!.Message, Is.EqualTo("The RelationshipType Name must contain only letters."));
+    }
+
+    [Test]
+    public void CreateAsync_OnInverseNameCheckViolation_ThrowsValidationExceptionAboutLettersOnly()
+    {
+        _db.ThrowOnSaveChanges(PostgresExceptionFactory.CheckViolation(constraintName: "ck_relationship_type_inverse_name"));
+
+        var ex = Assert.ThrowsAsync<ValidationException>(
+            () => _repository.CreateAsync(new RelationshipType { Id = Guid.NewGuid(), Name = "hasCapital", InverseName = "capital_of" }));
+
+        Assert.That(ex!.Message, Is.EqualTo("The RelationshipType InverseName must contain only letters."));
+    }
 }

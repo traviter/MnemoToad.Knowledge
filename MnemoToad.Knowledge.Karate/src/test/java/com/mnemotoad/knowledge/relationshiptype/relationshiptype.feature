@@ -4,6 +4,7 @@ Feature: RelationshipType API
   Background:
     * url baseUrl
     * def uniqueName = read('classpath:com/mnemotoad/knowledge/common/util.js')
+    * def uniqueAlphaName = read('classpath:com/mnemotoad/knowledge/common/uniqueAlphaName.js')
     * def relationshipTypeFixtures = call read('fixtures.js')
     * def nodeTypeFixtures = call read('classpath:com/mnemotoad/knowledge/nodetype/fixtures.js')
     * def knowledgeNodeFixtures = call read('classpath:com/mnemotoad/knowledge/knowledgenode/fixtures.js')
@@ -25,8 +26,8 @@ Feature: RelationshipType API
       """
 
   Scenario: Create a relationship type successfully
-    * def name = uniqueName('RelationshipType')
-    * def inverseName = 'inverseOf_' + name
+    * def name = uniqueAlphaName('RelationshipType')
+    * def inverseName = 'inverseOf' + name
     Given path 'relationshipTypes'
     And request { name: '#(name)', inverseName: '#(inverseName)', description: 'Created by Karate test' }
     When method post
@@ -44,11 +45,24 @@ Feature: RelationshipType API
     Then status 400
 
   Scenario: Reject creation with a duplicate name
-    * def name = uniqueName('RelationshipType')
+    * def name = uniqueAlphaName('RelationshipType')
     * def created = createRelationshipType({ name: name })
 
     Given path 'relationshipTypes'
     And request { name: '#(name)' }
+    When method post
+    Then status 400
+
+  Scenario: Reject creation with a non-alpha name
+    Given path 'relationshipTypes'
+    And request { name: 'hasCapital1', description: 'should fail' }
+    When method post
+    Then status 400
+
+  Scenario: Reject creation with a non-alpha inverseName
+    * def name = uniqueAlphaName('RelationshipType')
+    Given path 'relationshipTypes'
+    And request { name: '#(name)', inverseName: 'capital_of' }
     When method post
     Then status 400
 
@@ -72,8 +86,8 @@ Feature: RelationshipType API
   Scenario: Update a relationship type
     * def created = createRelationshipType()
 
-    * def updatedName = created.response.name + '_Updated'
-    * def updatedInverseName = 'inverseOf_' + updatedName
+    * def updatedName = created.response.name + 'Updated'
+    * def updatedInverseName = 'inverseOf' + updatedName
     Given path 'relationshipTypes', created.response.id
     And request { name: '#(updatedName)', inverseName: '#(updatedInverseName)', description: 'Updated by test' }
     When method put
@@ -83,8 +97,8 @@ Feature: RelationshipType API
     And match response.description == 'Updated by test'
 
   Scenario: Reject update with a duplicate name
-    * def name1 = uniqueName('RelationshipType')
-    * def name2 = uniqueName('RelationshipType')
+    * def name1 = uniqueAlphaName('RelationshipType')
+    * def name2 = uniqueAlphaName('RelationshipType')
     * def created1 = createRelationshipType({ name: name1 })
     * def created2 = createRelationshipType({ name: name2 })
 
