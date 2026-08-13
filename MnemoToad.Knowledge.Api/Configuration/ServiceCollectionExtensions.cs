@@ -3,6 +3,7 @@ using MnemoToad.Knowledge.Api.Json;
 using MnemoToad.Knowledge.Api.Swagger;
 using MnemoToad.Knowledge.Data;
 using MnemoToad.Knowledge.Data.PathResolution;
+using MnemoToad.Knowledge.Data.TerminalResolvers;
 using MnemoToad.Knowledge.Data.Repositories;
 
 namespace MnemoToad.Knowledge.Api.Configuration;
@@ -37,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IKnowledgeRelationRepository, KnowledgeRelationRepository>();
         services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
         services.AddScoped<IPathExpressionParser, PathExpressionParser>();
+        services.AddScoped<ITerminalResolverFactory, TerminalResolverFactory>();
         services.AddScoped<IPathResolutionRepository, PathResolutionRepository>();
 
         return services;

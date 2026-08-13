@@ -1,5 +1,6 @@
 using Moq;
 using MnemoToad.Knowledge.Data.PathResolution;
+using MnemoToad.Knowledge.Data.TerminalResolvers;
 using MnemoToad.Knowledge.Data.Repositories;
 using MnemoToad.Knowledge.Tests.TestSupport;
 using NUnit.Framework;
@@ -19,7 +20,7 @@ public class PathResolutionRepositoryTests
     {
         _db = new MockableAppDbContext();
         _parser = new Mock<IPathExpressionParser>();
-        _repository = new PathResolutionRepository(_db, _parser.Object);
+        _repository = new PathResolutionRepository(_db, _parser.Object, new TerminalResolverFactory(_db));
     }
 
     [TearDown]
@@ -83,7 +84,7 @@ public class PathResolutionRepositoryTests
     }
 
     [Test]
-    public async Task ResolveAsync_ColumnDescriptionWhenNull_ReturnsNullValueNotError()
+    public async Task ResolveAsync_ColumnDescriptionWhenNull_ReturnsError()
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id, description: null);
@@ -91,8 +92,8 @@ public class PathResolutionRepositoryTests
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_description"));
 
-        Assert.That(result.Error, Is.Null);
         Assert.That(result.Value, Is.Null);
+        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
     }
 
     [Test]
