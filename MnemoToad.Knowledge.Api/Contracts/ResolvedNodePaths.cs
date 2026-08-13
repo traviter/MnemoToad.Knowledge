@@ -11,9 +11,10 @@ namespace MnemoToad.Knowledge.Api.Contracts;
 /// <c>{ id, alt_text, metadata }</c> object.
 /// </param>
 /// <param name="Errors">
-/// The paths that couldn't be resolved (node not found, a hop's relation doesn't exist, or the
-/// terminal's attribute/media key is missing), keyed the same way, each with a message describing
-/// why. A path appears in exactly one of <paramref name="Properties"/> or <paramref name="Errors"/>.
+/// The paths that couldn't be resolved (node not found, an edge in the path doesn't match any
+/// relation, or the terminal's attribute/media key is missing), keyed the same way, each with a
+/// message describing why. A path appears in exactly one of <paramref name="Properties"/> or
+/// <paramref name="Errors"/>.
 /// Omitted entirely when every path resolved.
 /// </param>
 public record ResolvedNodePaths(

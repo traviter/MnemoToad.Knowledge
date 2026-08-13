@@ -188,7 +188,7 @@ public class PathResolutionRepositoryTests
     }
 
     [Test]
-    public async Task ResolveAsync_OneHopForwardViaName_FollowsToTargetNode()
+    public async Task ResolveAsync_OneEdgeForwardViaName_FollowsToTargetNode()
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var source = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
@@ -217,7 +217,7 @@ public class PathResolutionRepositoryTests
     }
 
     [Test]
-    public async Task ResolveAsync_TwoHopChain_ResolvesAcrossBothRelations()
+    public async Task ResolveAsync_TwoEdgeChain_ResolvesAcrossBothRelations()
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var city = await _db.CreateKnowledgeNodeAsync(nodeType.Id);

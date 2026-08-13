@@ -6,7 +6,7 @@ namespace MnemoToad.Knowledge.Data.PathResolution;
 public class PathExpressionParser : IPathExpressionParser
 {
     private static readonly Regex FullPattern = new(@"^(?:>[^>_.#]+)*(?<marker>[_.#])(?<name>[^>_.#]+)$", RegexOptions.Compiled);
-    private static readonly Regex HopPattern = new(@">([^>_.#]+)", RegexOptions.Compiled);
+    private static readonly Regex EdgePattern = new(@">([^>_.#]+)", RegexOptions.Compiled);
 
     public bool TryParse(string path, out PathExpression? expression)
     {
@@ -17,7 +17,7 @@ public class PathExpressionParser : IPathExpressionParser
             return false;
         }
 
-        var hops = HopPattern.Matches(path).Select(m => m.Groups[1].Value).ToList();
+        var edges = EdgePattern.Matches(path).Select(m => m.Groups[1].Value).ToList();
         var kind = match.Groups["marker"].Value switch
         {
             "_" => PathTerminalKind.Column,
@@ -26,7 +26,7 @@ public class PathExpressionParser : IPathExpressionParser
             _ => throw new UnreachableException()
         };
 
-        expression = new PathExpression(hops, kind, match.Groups["name"].Value);
+        expression = new PathExpression(edges, kind, match.Groups["name"].Value);
         return true;
     }
 }

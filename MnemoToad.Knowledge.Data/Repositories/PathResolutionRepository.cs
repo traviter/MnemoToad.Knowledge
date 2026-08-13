@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.PathResolution;
 using System.Text.Json.Nodes;
 
@@ -30,37 +31,39 @@ public class PathResolutionRepository : IPathResolutionRepository
         if (!_parser.TryParse(query.Path, out var expression))
             return new ResolvedPath(query.NodeId, query.Path, null, "Invalid Path DSL syntax.");
 
-        IQueryable<Guid> currentIds = _db.KnowledgeNode.AsNoTracking()
-            .Where(n => n.Id == query.NodeId)
-            .Select(n => n.Id);
-        foreach (var hop in expression!.Hops)
-            currentIds = ExtendPath(currentIds, hop);
-
+        var targetNode = TraversePathToNode(query.NodeId, expression!.Edges);
         var (value, error) = expression.TerminalKind switch
         {
-            PathTerminalKind.Column => await ResolveColumnAsync(currentIds, expression.TerminalName),
-            PathTerminalKind.Attribute => await ResolveAttributeAsync(currentIds, expression.TerminalName),
-            PathTerminalKind.Media => await ResolveMediaAsync(currentIds, expression.TerminalName),
+            PathTerminalKind.Column => await ResolveColumnAsync(targetNode, expression.TerminalName),
+            PathTerminalKind.Attribute => await ResolveAttributeAsync(targetNode, expression.TerminalName),
+            PathTerminalKind.Media => await ResolveMediaAsync(targetNode, expression.TerminalName),
             _ => (null, "Unknown terminal kind.")
         };
         return new ResolvedPath(query.NodeId, query.Path, value, error);
     }
 
-    private IQueryable<Guid> ExtendPath(IQueryable<Guid> currentIds, string hopName) =>
-        from id in currentIds
-        join r in _db.KnowledgeRelation on id equals r.SourceNodeId
-        join rt in _db.RelationshipType on r.RelationshipTypeId equals rt.Id
-        where rt.Name == hopName
-        select r.TargetNodeId;
+    private IQueryable<KnowledgeNode> TraversePathToNode(Guid startingNodeId, IReadOnlyList<string> edges)
+    {
+        IQueryable<KnowledgeNode> currentNodes = _db.KnowledgeNode.AsNoTracking().Where(n => n.Id == startingNodeId);
+        foreach (var edge in edges)
+            currentNodes = TraverseEdge(currentNodes, edge);
+        return currentNodes;
+    }
 
-    private async Task<(JsonNode? Value, string? Error)> ResolveColumnAsync(IQueryable<Guid> currentIds, string columnName)
+    private IQueryable<KnowledgeNode> TraverseEdge(IQueryable<KnowledgeNode> currentNode, string edgeName) =>
+        from n in currentNode
+        join r in _db.KnowledgeRelation on n.Id equals r.SourceNodeId
+        join rt in _db.RelationshipType on r.RelationshipTypeId equals rt.Id
+        where rt.Name == edgeName
+        join target in _db.KnowledgeNode on r.TargetNodeId equals target.Id
+        select target;
+
+    private async Task<(JsonNode? Value, string? Error)> ResolveColumnAsync(IQueryable<KnowledgeNode> targetNode, string columnName)
     {
         if (!ValidColumns.Contains(columnName))
             return (null, $"No column named '{columnName}' on KnowledgeNode.");
 
-        var node = await (from id in currentIds join n in _db.KnowledgeNode on id equals n.Id select n)
-            .AsNoTracking()
-            .FirstOrDefaultAsync();
+        var node = await targetNode.FirstOrDefaultAsync();
         if (node is null)
             return (null, "Path could not be resolved.");
 
@@ -73,26 +76,24 @@ public class PathResolutionRepository : IPathResolutionRepository
         };
     }
 
-    private async Task<(JsonNode? Value, string? Error)> ResolveAttributeAsync(IQueryable<Guid> currentIds, string key)
+    private async Task<(JsonNode? Value, string? Error)> ResolveAttributeAsync(IQueryable<KnowledgeNode> targetNode, string key)
     {
-        var attribute = await (from id in currentIds
-                                join a in _db.KnowledgeNodeAttribute on id equals a.KnowledgeNodeId
+        var attribute = await (from n in targetNode
+                                join a in _db.KnowledgeNodeAttribute on n.Id equals a.KnowledgeNodeId
                                 where a.Key == key
                                 select a)
-            .AsNoTracking()
             .FirstOrDefaultAsync();
         return attribute is null
             ? (null, "Path could not be resolved.")
             : (attribute.Value, null);
     }
 
-    private async Task<(JsonNode? Value, string? Error)> ResolveMediaAsync(IQueryable<Guid> currentIds, string key)
+    private async Task<(JsonNode? Value, string? Error)> ResolveMediaAsync(IQueryable<KnowledgeNode> targetNode, string key)
     {
-        var media = await (from id in currentIds
-                            join m in _db.KnowledgeNodeMedia on id equals m.KnowledgeNodeId
+        var media = await (from n in targetNode
+                            join m in _db.KnowledgeNodeMedia on n.Id equals m.KnowledgeNodeId
                             where m.Key == key
                             select m)
-            .AsNoTracking()
             .FirstOrDefaultAsync();
         if (media is null)
             return (null, "Path could not be resolved.");

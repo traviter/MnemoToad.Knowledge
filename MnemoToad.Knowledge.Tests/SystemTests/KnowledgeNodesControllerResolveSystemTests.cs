@@ -40,7 +40,7 @@ public class KnowledgeNodesControllerResolveSystemTests
 
     private static readonly string[] SuccessCases =
     [
-        "mixed-terminals", "media-with-metadata", "one-hop-relation", "duplicate-node-id",
+        "mixed-terminals", "media-with-metadata", "one-edge-relation", "duplicate-node-id",
         "missing-attribute-error", "missing-relation-error", "node-not-found"
     ];
 

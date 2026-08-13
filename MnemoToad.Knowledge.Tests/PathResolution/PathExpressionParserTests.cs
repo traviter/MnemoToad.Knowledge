@@ -17,7 +17,7 @@ public class PathExpressionParserTests
         var result = _parser.TryParse("_canonicalName", out var expression);
 
         Assert.That(result, Is.True);
-        Assert.That(expression!.Hops, Is.Empty);
+        Assert.That(expression!.Edges, Is.Empty);
         Assert.That(expression.TerminalKind, Is.EqualTo(PathTerminalKind.Column));
         Assert.That(expression.TerminalName, Is.EqualTo("canonicalName"));
     }
@@ -43,23 +43,23 @@ public class PathExpressionParserTests
     }
 
     [Test]
-    public void TryParse_OneHopThenColumn_Succeeds()
+    public void TryParse_OneEdgeThenColumn_Succeeds()
     {
         var result = _parser.TryParse(">capital_canonicalName", out var expression);
 
         Assert.That(result, Is.True);
-        Assert.That(expression!.Hops, Is.EqualTo(new[] { "capital" }));
+        Assert.That(expression!.Edges, Is.EqualTo(new[] { "capital" }));
         Assert.That(expression.TerminalKind, Is.EqualTo(PathTerminalKind.Column));
         Assert.That(expression.TerminalName, Is.EqualTo("canonicalName"));
     }
 
     [Test]
-    public void TryParse_TwoHopsThenColumn_Succeeds()
+    public void TryParse_TwoEdgesThenColumn_Succeeds()
     {
         var result = _parser.TryParse(">partOf>partOf_canonicalName", out var expression);
 
         Assert.That(result, Is.True);
-        Assert.That(expression!.Hops, Is.EqualTo(new[] { "partOf", "partOf" }));
+        Assert.That(expression!.Edges, Is.EqualTo(new[] { "partOf", "partOf" }));
         Assert.That(expression.TerminalName, Is.EqualTo("canonicalName"));
     }
 
@@ -81,7 +81,7 @@ public class PathExpressionParserTests
     }
 
     [Test]
-    public void TryParse_HopWithNoTerminal_Fails()
+    public void TryParse_EdgeWithNoTerminal_Fails()
     {
         var result = _parser.TryParse(">capital", out _);
 
@@ -97,10 +97,10 @@ public class PathExpressionParserTests
     }
 
     [Test]
-    public void TryParse_HopNameContainingUnderscore_Fails()
+    public void TryParse_EdgeNameContainingUnderscore_Fails()
     {
         // Documents a real, discovered grammar constraint: '_'/'.'/'#' are reserved terminal
-        // markers, so a hop name containing one makes the string ambiguous to parse.
+        // markers, so an edge name containing one makes the string ambiguous to parse.
         var result = _parser.TryParse(">a_b.value", out _);
 
         Assert.That(result, Is.False);

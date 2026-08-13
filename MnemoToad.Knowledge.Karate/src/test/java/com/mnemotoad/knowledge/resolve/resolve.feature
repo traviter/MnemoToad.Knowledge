@@ -24,7 +24,7 @@ Feature: Resolve Property Path DSL expressions against KnowledgeNodes
       | case                     |
       | mixed-terminals          |
       | media-with-metadata      |
-      | one-hop-relation         |
+      | one-edge-relation        |
       | duplicate-node-id        |
       | missing-attribute-error  |
       | missing-relation-error   |

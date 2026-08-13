@@ -131,9 +131,9 @@ public class KnowledgeNodesController : ControllerBase
     /// One result per requested entry, in request order. <c>properties</c> holds the paths that
     /// resolved — a scalar for a column/attribute path, an <c>{ id, alt_text, metadata }</c> object
     /// for a media path. <c>errors</c> (omitted when empty) holds the paths that didn't — node not
-    /// found, a hop's relation doesn't exist, or the terminal's attribute/media key is missing —
-    /// each reported as <c>"Path could not be resolved."</c>, without specifying which stage
-    /// failed. A path appears in exactly one of the two. Partial failures never fail the batch.
+    /// found, an edge in the path doesn't match any relation, or the terminal's attribute/media key
+    /// is missing — each reported as <c>"Path could not be resolved."</c>, without specifying which
+    /// stage failed. A path appears in exactly one of the two. Partial failures never fail the batch.
     /// </response>
     /// <response code="400">
     /// The request array was missing/empty, an entry's <c>nodeId</c> was missing, <c>paths</c> was
