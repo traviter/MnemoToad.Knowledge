@@ -1,7 +1,10 @@
 using Moq;
+using MnemoToad.Knowledge.Data.Common;
+using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.PathResolution;
-using MnemoToad.Knowledge.Data.TerminalResolvers;
+using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.Repositories;
+using MnemoToad.Knowledge.Data.TerminalResolvers;
 using MnemoToad.Knowledge.Tests.TestSupport;
 using NUnit.Framework;
 using System.Text.Json.Nodes;
@@ -13,6 +16,9 @@ public class PathResolutionRepositoryTests
 {
     private MockableAppDbContext _db = null!;
     private Mock<IPathExpressionParser> _parser = null!;
+    private Mock<ITerminalResolverFactory> _terminalResolverFactory = null!;
+    private Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>> _edgeQueryTransform = null!;
+    private Mock<ITerminalResolver> _resolver = null!;
     private PathResolutionRepository _repository = null!;
 
     [SetUp]
@@ -20,7 +26,13 @@ public class PathResolutionRepositoryTests
     {
         _db = new MockableAppDbContext();
         _parser = new Mock<IPathExpressionParser>();
-        _repository = new PathResolutionRepository(_db, _parser.Object, new TerminalResolverFactory(_db));
+        _terminalResolverFactory = new Mock<ITerminalResolverFactory>();
+        _edgeQueryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>>();
+        _edgeQueryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()))
+            .Returns((IQueryable<KnowledgeNode> source, string _) => source);
+        _resolver = new Mock<ITerminalResolver>();
+        _repository = new PathResolutionRepository(_db, _parser.Object, _terminalResolverFactory.Object, _edgeQueryTransform.Object);
     }
 
     [TearDown]
@@ -35,8 +47,14 @@ public class PathResolutionRepositoryTests
         _parser.Setup(p => p.TryParse(path, out expression)).Returns(false);
     }
 
+    private void SetupResolver(PathTerminalKind kind, Result<JsonNode> result)
+    {
+        _resolver.Setup(r => r.ResolveAsync(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>())).ReturnsAsync(result);
+        _terminalResolverFactory.Setup(f => f.GetResolver(kind)).Returns(_resolver.Object);
+    }
+
     [Test]
-    public async Task ResolveAsync_UnparseablePath_ReturnsError()
+    public async Task ResolveAsync_UnparseablePath_ReturnsErrorWithoutTouchingOtherCollaborators()
     {
         SetupParseFailure("not-a-valid-path");
 
@@ -44,216 +62,103 @@ public class PathResolutionRepositoryTests
 
         Assert.That(result.Value, Is.Null);
         Assert.That(result.Error, Is.EqualTo("Invalid Path DSL syntax."));
+        _terminalResolverFactory.Verify(f => f.GetResolver(It.IsAny<PathTerminalKind>()), Times.Never);
+        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
     }
 
     [Test]
-    public async Task ResolveAsync_NodeNotFound_ReturnsError()
+    public async Task ResolveAsync_ZeroEdgePath_DispatchesToColumnResolverWithoutCallingEdgeTransform()
     {
+        var nodeId = Guid.NewGuid();
         SetupParse("_canonicalName", new PathExpression([], PathTerminalKind.Column, "canonicalName"));
+        SetupResolver(PathTerminalKind.Column, JsonValue.Create("France")!);
 
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), "_canonicalName"));
-
-        Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
-    }
-
-    [Test]
-    public async Task ResolveAsync_ColumnCanonicalName_ReturnsValue()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "France");
-        SetupParse("_canonicalName", new PathExpression([], PathTerminalKind.Column, "canonicalName"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_canonicalName"));
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(nodeId, "_canonicalName"));
 
         Assert.That(result.Error, Is.Null);
         Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("France"));
+        _terminalResolverFactory.Verify(f => f.GetResolver(PathTerminalKind.Column), Times.Once);
+        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
     }
 
     [Test]
-    public async Task ResolveAsync_ColumnId_ReturnsNodeIdAsString()
+    public async Task ResolveAsync_TerminalResolverReturnsFailure_ReturnsErrorMessage()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse("_id", new PathExpression([], PathTerminalKind.Column, "id"));
+        SetupParse(".gdp", new PathExpression([], PathTerminalKind.Attribute, "gdp"));
+        SetupResolver(PathTerminalKind.Attribute, new Error("Path could not be resolved."));
 
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_id"));
-
-        Assert.That(result.Error, Is.Null);
-        Assert.That(result.Value!.GetValue<string>(), Is.EqualTo(node.Id.ToString()));
-    }
-
-    [Test]
-    public async Task ResolveAsync_ColumnDescriptionWhenNull_ReturnsError()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id, description: null);
-        SetupParse("_description", new PathExpression([], PathTerminalKind.Column, "description"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_description"));
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), ".gdp"));
 
         Assert.That(result.Value, Is.Null);
         Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
     }
 
     [Test]
-    public async Task ResolveAsync_UnknownColumn_ReturnsError()
+    public async Task ResolveAsync_AttributeTerminal_DispatchesToAttributeResolver()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse("_bogus", new PathExpression([], PathTerminalKind.Column, "bogus"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_bogus"));
-
-        Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("No column named 'bogus' on KnowledgeNode."));
-    }
-
-    [Test]
-    public async Task ResolveAsync_Attribute_ReturnsStoredValue()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        await _db.CreateKnowledgeNodeAttributeAsync(node.Id, "population", JsonValue.Create(68000000));
         SetupParse(".population", new PathExpression([], PathTerminalKind.Attribute, "population"));
+        SetupResolver(PathTerminalKind.Attribute, JsonValue.Create(68000000)!);
 
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ".population"));
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), ".population"));
 
         Assert.That(result.Error, Is.Null);
         Assert.That(result.Value!.GetValue<int>(), Is.EqualTo(68000000));
+        _terminalResolverFactory.Verify(f => f.GetResolver(PathTerminalKind.Attribute), Times.Once);
     }
 
     [Test]
-    public async Task ResolveAsync_MissingAttribute_ReturnsError()
+    public async Task ResolveAsync_MediaTerminal_DispatchesToMediaResolver()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse(".gdp", new PathExpression([], PathTerminalKind.Attribute, "gdp"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ".gdp"));
-
-        Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
-    }
-
-    [Test]
-    public async Task ResolveAsync_MediaWithNoExtraMetadata_ReturnsIdAndAltTextOnly()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var mediaAsset = await _db.CreateMediaAssetAsync();
-        await _db.CreateKnowledgeNodeMediaAsync(node.Id, "flag", mediaAsset.Id, "A flag");
         SetupParse("#flag", new PathExpression([], PathTerminalKind.Media, "flag"));
+        SetupResolver(PathTerminalKind.Media, new JsonObject { ["id"] = "abc" });
 
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "#flag"));
-
-        Assert.That(result.Error, Is.Null);
-        var value = result.Value!.AsObject();
-        Assert.That(value["id"]!.GetValue<string>(), Is.EqualTo(mediaAsset.Id.ToString()));
-        Assert.That(value["alt_text"]!.GetValue<string>(), Is.EqualTo("A flag"));
-        Assert.That(value.ContainsKey("metadata"), Is.False);
-    }
-
-    [Test]
-    public async Task ResolveAsync_MediaWithExtraFields_ReturnsAllFieldsFlat()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var mediaAsset = await _db.CreateMediaAssetAsync();
-        await _db.CreateKnowledgeNodeMediaAsync(node.Id, "coatOfArms", mediaAsset.Id, "A coat of arms",
-            new JsonObject { ["id"] = mediaAsset.Id.ToString(), ["alt_text"] = "A coat of arms", ["credit"] = "Wikimedia Commons" });
-        SetupParse("#coatOfArms", new PathExpression([], PathTerminalKind.Media, "coatOfArms"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "#coatOfArms"));
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), "#flag"));
 
         Assert.That(result.Error, Is.Null);
-        var value = result.Value!.AsObject();
-        Assert.That(value["id"]!.GetValue<string>(), Is.EqualTo(mediaAsset.Id.ToString()));
-        Assert.That(value["alt_text"]!.GetValue<string>(), Is.EqualTo("A coat of arms"));
-        Assert.That(value["credit"]!.GetValue<string>(), Is.EqualTo("Wikimedia Commons"));
-        Assert.That(value.ContainsKey("metadata"), Is.False);
+        Assert.That(result.Value!["id"]!.GetValue<string>(), Is.EqualTo("abc"));
+        _terminalResolverFactory.Verify(f => f.GetResolver(PathTerminalKind.Media), Times.Once);
     }
 
     [Test]
-    public async Task ResolveAsync_MissingMedia_ReturnsError()
+    public async Task ResolveAsync_WithEdges_CallsEdgeTransformOncePerEdgeInOrder()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse("#flag", new PathExpression([], PathTerminalKind.Media, "flag"));
+        SetupParse(">continent>country_canonicalName", new PathExpression(["continent", "country"], PathTerminalKind.Column, "canonicalName"));
+        SetupResolver(PathTerminalKind.Column, JsonValue.Create("France")!);
 
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "#flag"));
-
-        Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
-    }
-
-    [Test]
-    public async Task ResolveAsync_OneEdgeForwardViaName_FollowsToTargetNode()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var source = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var target = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "Paris");
-        var relationshipType = await _db.CreateRelationshipTypeAsync(name: "capital", inverseName: "capitalOf");
-        await _db.CreateKnowledgeRelationAsync(source.Id, relationshipType.Id, target.Id);
-        SetupParse(">capital_canonicalName", new PathExpression(["capital"], PathTerminalKind.Column, "canonicalName"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(source.Id, ">capital_canonicalName"));
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), ">continent>country_canonicalName"));
 
         Assert.That(result.Error, Is.Null);
-        Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("Paris"));
-    }
-
-    [Test]
-    public async Task ResolveAsync_MissingRelation_ReturnsError()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse(">doesNotExist_canonicalName", new PathExpression(["doesNotExist"], PathTerminalKind.Column, "canonicalName"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ">doesNotExist_canonicalName"));
-
-        Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
-    }
-
-    [Test]
-    public async Task ResolveAsync_TwoEdgeChain_ResolvesAcrossBothRelations()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var city = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var region = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var country = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "France");
-        var partOf = await _db.CreateRelationshipTypeAsync(name: "partOf");
-        await _db.CreateKnowledgeRelationAsync(city.Id, partOf.Id, region.Id);
-        await _db.CreateKnowledgeRelationAsync(region.Id, partOf.Id, country.Id);
-        SetupParse(">partOf>partOf_canonicalName", new PathExpression(["partOf", "partOf"], PathTerminalKind.Column, "canonicalName"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(city.Id, ">partOf>partOf_canonicalName"));
-
-        Assert.That(result.Error, Is.Null);
-        Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("France"));
+        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "continent"), Times.Once);
+        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "country"), Times.Once);
     }
 
     [Test]
     public async Task ResolveAsync_Batch_ResolvesEachQueryIndependentlyInOrder()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "France");
-        await _db.CreateKnowledgeNodeAttributeAsync(node.Id, "population", JsonValue.Create(68000000));
+        var nodeId = Guid.NewGuid();
         SetupParse("_canonicalName", new PathExpression([], PathTerminalKind.Column, "canonicalName"));
         SetupParse(".population", new PathExpression([], PathTerminalKind.Attribute, "population"));
-        SetupParse(".gdp", new PathExpression([], PathTerminalKind.Attribute, "gdp"));
+
+        var columnResolver = new Mock<ITerminalResolver>();
+        columnResolver.Setup(r => r.ResolveAsync(It.IsAny<IQueryable<KnowledgeNode>>(), "canonicalName"))
+            .ReturnsAsync((Result<JsonNode>)JsonValue.Create("France")!);
+        var attributeResolver = new Mock<ITerminalResolver>();
+        attributeResolver.Setup(r => r.ResolveAsync(It.IsAny<IQueryable<KnowledgeNode>>(), "population"))
+            .ReturnsAsync((Result<JsonNode>)new Error("Path could not be resolved."));
+
+        _terminalResolverFactory.Setup(f => f.GetResolver(PathTerminalKind.Column)).Returns(columnResolver.Object);
+        _terminalResolverFactory.Setup(f => f.GetResolver(PathTerminalKind.Attribute)).Returns(attributeResolver.Object);
 
         var results = await _repository.ResolveAsync(
         [
-            new PathResolutionQuery(node.Id, "_canonicalName"),
-            new PathResolutionQuery(node.Id, ".population"),
-            new PathResolutionQuery(node.Id, ".gdp")
+            new PathResolutionQuery(nodeId, "_canonicalName"),
+            new PathResolutionQuery(nodeId, ".population")
         ]);
 
-        Assert.That(results, Has.Count.EqualTo(3));
+        Assert.That(results, Has.Count.EqualTo(2));
         Assert.That(results[0].Value!.GetValue<string>(), Is.EqualTo("France"));
-        Assert.That(results[1].Value!.GetValue<int>(), Is.EqualTo(68000000));
-        Assert.That(results[2].Error, Is.EqualTo("Path could not be resolved."));
+        Assert.That(results[0].Error, Is.Null);
+        Assert.That(results[1].Value, Is.Null);
+        Assert.That(results[1].Error, Is.EqualTo("Path could not be resolved."));
     }
 }

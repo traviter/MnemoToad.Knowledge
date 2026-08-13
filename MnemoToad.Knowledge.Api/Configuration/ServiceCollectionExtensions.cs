@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using MnemoToad.Knowledge.Api.Json;
 using MnemoToad.Knowledge.Api.Swagger;
 using MnemoToad.Knowledge.Data;
+using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.PathResolution;
+using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
 using MnemoToad.Knowledge.Data.Repositories;
 
@@ -39,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
         services.AddScoped<IPathExpressionParser, PathExpressionParser>();
         services.AddScoped<ITerminalResolverFactory, TerminalResolverFactory>();
+        services.AddScoped<IQueryTransform<KnowledgeNode, KnowledgeNode>, NodeRelationshipQueryTransform>();
         services.AddScoped<IPathResolutionRepository, PathResolutionRepository>();
 
         return services;

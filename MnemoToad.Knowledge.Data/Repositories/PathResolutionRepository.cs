@@ -16,12 +16,13 @@ public class PathResolutionRepository : IPathResolutionRepository
     private readonly ITerminalResolverFactory _terminalResolverFactory;
     private readonly IQueryTransform<KnowledgeNode, KnowledgeNode> _edgeQueryTransform;
 
-    public PathResolutionRepository(IAppDbContext db, IPathExpressionParser parser, ITerminalResolverFactory terminalResolverFactory)
+    public PathResolutionRepository(IAppDbContext db, IPathExpressionParser parser, ITerminalResolverFactory terminalResolverFactory,
+        IQueryTransform<KnowledgeNode, KnowledgeNode> edgeQueryTransform)
     {
         _db = db;
         _parser = parser;
         _terminalResolverFactory = terminalResolverFactory;
-        _edgeQueryTransform = new NodeRelationshipQueryTransform(db);
+        _edgeQueryTransform = edgeQueryTransform;
     }
 
     public async Task<List<ResolvedPath>> ResolveAsync(IReadOnlyList<PathResolutionQuery> queries)

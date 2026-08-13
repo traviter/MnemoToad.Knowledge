@@ -30,10 +30,11 @@
   project reference from the API; only shares the solution file.
 - `MnemoToad.Knowledge.Karate` — Java/Maven, integration tests. Separate toolchain, not in the `.sln`, no
   impact on .NET build.
-- `MnemoToad.Knowledge.Tests` — NUnit + Moq (not xUnit — switched deliberately). Three layers of coverage:
+- `MnemoToad.Knowledge.Tests` — NUnit + Moq (not xUnit — switched deliberately). Four layers of coverage:
   controller tests mock the repository interface directly (no service layer left to mock), repository
-  tests run against a real EF Core InMemory database, and system tests send real HTTP requests through
-  the full app pipeline. See "Testing" below for the full pattern.
+  tests run against a real EF Core SQLite database, component tests run a real multi-class subsystem
+  (not just one repository) against that same database, and system tests send real HTTP requests
+  through the full app pipeline. See "Testing" below for the full pattern.
 
 ## Database (Postgres)
 - **DbUp, not EF Core Migrations.** Deliberate choice — plain numbered `.sql` scripts in
@@ -745,9 +746,14 @@
     resolvers itself, directly, from the scoped `IAppDbContext` it's constructed with (no
     `IServiceProvider` service-locator call), keyed by `PathTerminalKind`; `GetResolver` throws
     `InvalidOperationException` rather than returning null for an unregistered kind, since that
-    state should be unreachable given the enum is closed and every value is wired up. Same pattern
-    for edge traversal: `PathResolutionRepository` constructs its own
-    `NodeRelationshipQueryTransform` internally rather than taking it as a registered dependency.
+    state should be unreachable given the enum is closed and every value is wired up.
+    `PathResolutionRepository` itself takes `IQueryTransform<KnowledgeNode, KnowledgeNode>` as a
+    fourth constructor parameter (`ServiceCollectionExtensions.cs` has a matching
+    `AddScoped<IQueryTransform<KnowledgeNode, KnowledgeNode>, NodeRelationshipQueryTransform>()`
+    line) rather than constructing `NodeRelationshipQueryTransform` internally — a deliberate
+    reversal of the original "minimize API registration surface" call, made specifically so
+    `PathResolutionRepositoryTests` (see "Testing" below) could mock every one of its
+    collaborators instead of needing a real DB for the repository-level test.
   - **`Result<T>`/`Error`** (`MnemoToad.Knowledge.Data/Common/`) is a small closed discriminated
     union — `Result<T>.Success(T Value)` / `Result<T>.Failure(string Message)`, base constructor
     `private` so only those two nested records can ever exist — used as
@@ -791,7 +797,7 @@
 - **NUnit + Moq**, not xUnit — a deliberate switch, not the default `dotnet new` choice, so don't
   drift back to xUnit conventions (`[Fact]`, `Assert.Equal`) in new test files. Use `[TestFixture]`/
   `[Test]`/`[SetUp]` and `Assert.That(actual, Is.EqualTo(expected))`-style constraints.
-- Three layers of coverage, from fastest/most isolated to closest-to-real:
+- Four layers of coverage, from fastest/most isolated to closest-to-real:
   - **Controller tests** (`MnemoToad.Knowledge.Tests/Controllers/`) mock the repository interface directly with
     Moq (`new Mock<INodeTypeRepository>()`, `.Setup(...)`, `.Verify(...)`) — no service layer left to
     mock (see "API patterns" above). Since `ValidationException` → `400` translation now happens
@@ -817,6 +823,36 @@
     "Database" above). So constraint violations are still always simulated via
     `MockableAppDbContext`/`PostgresExceptionFactory`, exactly as before; the provider switch is
     purely so `ExecuteDelete`/`ExecuteUpdate` don't throw on the happy path.
+  - **Component tests** (`MnemoToad.Knowledge.Tests/Components/`) — new layer, currently just
+    `PathResolutionRepositoryTests`, moved here from `Repositories/` once `PathResolutionRepository`
+    stopped being testable in isolation the way the other five repositories are. It now collaborates
+    with a real `TerminalResolverFactory`, which itself builds real `ColumnTerminalResolver`/
+    `AttributeTerminalResolver`/`MediaTerminalResolver` and a real `NodeRelationshipQueryTransform` —
+    exercising `PathResolutionRepository.ResolveAsync` through the SQLite in-memory database (same
+    `MockableAppDbContext` as the repository layer, still no HTTP) now exercises that whole
+    subsystem, not one class with its dependencies mocked out. `IPathExpressionParser` is still
+    mocked (parsing itself is a pure function, already covered by its own
+    `PathExpressionParserTests`, and isn't worth constructing real DSL strings for on every case).
+    **`Repositories/PathResolutionRepositoryTests.cs` is a separate, second test file covering the
+    same class** — where the Components version exercises the real subsystem end-to-end, the
+    Repositories version mocks all four of `PathResolutionRepository`'s constructor dependencies
+    (`IPathExpressionParser`, `ITerminalResolverFactory`, `ITerminalResolver`, and
+    `IQueryTransform<KnowledgeNode, KnowledgeNode>`) and asserts pure dispatch/composition logic —
+    parse failure short-circuits before any resolver is touched, terminal kind picks the right
+    resolver, multiple edges fold the query transform once per edge in order, and each independent
+    query in a batch resolves separately. This works even though `IQueryable<T>.FirstOrDefaultAsync()`
+    normally needs a real `IAsyncQueryProvider` behind it, because the mocked
+    `ITerminalResolver.ResolveAsync` intercepts before the composed-but-unexecuted `IQueryable`
+    chain is ever enumerated — the still-required `IAppDbContext` constructor parameter is a real
+    (but untouched) `MockableAppDbContext`, present purely because the constructor demands one.
+    The three `ITerminalResolver` implementations and the three `IQueryTransform` implementations
+    each have their own dedicated test files too (`TerminalResolvers/`/`QueryTransforms/` under
+    `MnemoToad.Knowledge.Tests/`, mirroring the source folders) — these DO touch a real DB (each
+    calls `.FirstOrDefaultAsync()`/`.ToListAsync()` on a query it builds itself, which a Moq'd
+    `IQueryable` can't satisfy), so they're built against `MockableAppDbContext`/`DbFixtures` like
+    the ordinary repository tests, not fully mocked. `TerminalResolverFactory`, `Result<T>`/`Error`,
+    and `KnowledgeNodeMediaExtensions.ToJson()` have their own test files too — the latter two touch
+    no DB at all and are plain isolated unit tests.
   - **System tests** (`MnemoToad.Knowledge.Tests/SystemTests/`) send real HTTP requests through the full app
     pipeline via `WebApplicationFactory<Program>` — see below.
 - `[SetUp]` creates a fresh mock/context/factory per test (not shared/static state), so tests can't
