@@ -139,36 +139,22 @@ public class KnowledgeNodesControllerTests
     }
 
     [Test]
-    public async Task Create_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Create_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.CreateAsync(It.IsAny<KnowledgeNode>()))
             .ThrowsAsync(new ValidationException("A KnowledgeNode with the same NodeType and CanonicalName already exists."));
 
-        var result = await _controller.Create(new KnowledgeNodeRequest(Guid.NewGuid(), "Mercury", null));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("A KnowledgeNode with the same NodeType and CanonicalName already exists."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new KnowledgeNodeRequest(Guid.NewGuid(), "Mercury", null)));
     }
 
     [Test]
-    public async Task Create_WhenRepositoryThrowsValidationExceptionForAlreadyLinkedMediaAsset_ReturnsProblem400()
+    public void Create_WhenRepositoryThrowsValidationExceptionForAlreadyLinkedMediaAsset_PropagatesException()
     {
         _repository.Setup(r => r.CreateAsync(It.IsAny<KnowledgeNode>()))
             .ThrowsAsync(new ValidationException("The specified MediaAsset is already linked to another KnowledgeNode."));
 
-        var result = await _controller.Create(new KnowledgeNodeRequest(Guid.NewGuid(), "Mercury", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } }));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("The specified MediaAsset is already linked to another KnowledgeNode."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new KnowledgeNodeRequest(Guid.NewGuid(), "Mercury", null, null,
+            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } })));
     }
 
     [Test]
@@ -228,19 +214,12 @@ public class KnowledgeNodesControllerTests
     }
 
     [Test]
-    public async Task Update_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Update_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.UpdateAsync(It.IsAny<KnowledgeNode>()))
             .ThrowsAsync(new ValidationException("The specified NodeType does not exist."));
 
-        var result = await _controller.Update(Guid.NewGuid(), new KnowledgeNodeRequest(Guid.NewGuid(), "Mercury", null));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("The specified NodeType does not exist."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Update(Guid.NewGuid(), new KnowledgeNodeRequest(Guid.NewGuid(), "Mercury", null)));
     }
 
     [Test]
@@ -264,19 +243,12 @@ public class KnowledgeNodesControllerTests
     }
 
     [Test]
-    public async Task Delete_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Delete_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.DeleteAsync(It.IsAny<Guid>()))
             .ThrowsAsync(new ValidationException("The KnowledgeNode cannot be deleted because it is referenced by one or more KnowledgeRelations."));
 
-        var result = await _controller.Delete(Guid.NewGuid());
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("The KnowledgeNode cannot be deleted because it is referenced by one or more KnowledgeRelations."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Delete(Guid.NewGuid()));
     }
 
     [Test]

@@ -305,16 +305,26 @@
   System.Text.Json input formatter failing to convert the value at all — deserialization never
   reaches the point of building a `KnowledgeNodeRequest` to validate, so a second, unrelated
   `"request"` key ("The request field is required.") also appears in the same response).
-- Controller actions catch `ValidationException` (thrown by the repository — see
-  "Constraint-violation translation" below) and return
-  `Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest)`, an RFC 7807
-  `ProblemDetails` response — the same family as the automatic DataAnnotations
-  `ValidationProblemDetails` 400 above, so both kinds of failure come back as the same status code
-  and a compatible body shape (`errors` dictionary vs. `detail` string differ by necessity, since
-  they represent different kinds of failures). Stays inline per-action (try/catch) rather than a
-  global exception filter — revisit only if this pattern repeats across many more actions.
-  `KnowledgeRelationsController.Delete` has no try/catch at all — deleting a `KnowledgeRelation` never
-  violates a constraint, since nothing has an FK pointing back at it.
+- `ValidationException` (thrown by the repository — see "Constraint-violation translation"
+  below) is translated to a `400` centrally, not per-action. `Configuration/
+  ValidationExceptionHandler.cs` (same file/namespace as `ServiceCollectionExtensions.cs` — no
+  dedicated `ExceptionHandling` namespace for one class) implements `IExceptionHandler`,
+  registered via `services.AddExceptionHandler<ValidationExceptionHandler>()` +
+  `services.AddProblemDetails()` in `ServiceCollectionExtensions.AddApiServices`, and wired into
+  the pipeline via `app.UseExceptionHandler()` in `Program.cs` (right after `builder.Build()`,
+  before `UseSwagger()`/`MapControllers()`). It writes the same RFC 7807 `ProblemDetails` shape
+  the old per-action `Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest)`
+  calls produced — the same family as the automatic DataAnnotations `ValidationProblemDetails`
+  400 above, so both kinds of failure come back as the same status code and a compatible body
+  shape (`errors` dictionary vs. `detail` string differ by necessity, since they represent
+  different kinds of failures). **This supersedes an earlier version of this rule** that kept the
+  try/catch inline per-action, revisiting only "if this pattern repeats across many more
+  actions" — it had, by the time this centralized (10 identical try/catch blocks across the 4
+  entity controllers with business logic), so the earlier call was reversed. Controller actions
+  are back to bare expression bodies, same shape non-throwing actions (e.g.
+  `MediaAssetsController`, `KnowledgeRelationsController.Delete`) always had —
+  `KnowledgeRelationsController.Delete` still has nothing to catch, deleting a `KnowledgeRelation`
+  never violates a constraint, since nothing has an FK pointing back at it.
 - PKs are `Guid`, generated app-side or via Postgres `gen_random_uuid()`.
 - **Constraint-violation translation lives entirely in the repository — the DB error is caught and
   rethrown as `System.ComponentModel.DataAnnotations.ValidationException` right there, with no
@@ -327,8 +337,9 @@
   because it is referenced by one or more KnowledgeNodes." / "A KnowledgeNode with the same NodeType
   and CanonicalName already exists." / "The specified NodeType does not exist."). No service has
   anything left to do with that exception — `ValidationException` propagates straight through
-  `CreateAsync`/`UpdateAsync`/`DeleteAsync` to the controller's existing
-  `catch (ValidationException) → BadRequest`. An earlier version of this routed through a
+  `CreateAsync`/`UpdateAsync`/`DeleteAsync`, through the controller action unchanged, to the
+  global `ValidationExceptionHandler` → `400` (see "API patterns" above). An earlier version of
+  this routed through a
   `ConstraintViolationTranslator` helper plus two custom exception types
   (`UniqueConstraintViolationException`/`ForeignKeyViolationException`) in `MnemoToad.Knowledge.Data/
   Exceptions/`, with each service catching those and re-throwing its own `ValidationException` — that
@@ -690,9 +701,12 @@
 - Three layers of coverage, from fastest/most isolated to closest-to-real:
   - **Controller tests** (`MnemoToad.Knowledge.Tests/Controllers/`) mock the repository interface directly with
     Moq (`new Mock<INodeTypeRepository>()`, `.Setup(...)`, `.Verify(...)`) — no service layer left to
-    mock (see "API patterns" above). `ValidationException`-catch assertions check the returned
-    `ObjectResult`'s `StatusCode` is `400` and its `Value` is a `ProblemDetails` with the expected
-    `Detail`, matching what the controller actually returns (`Problem(...)`).
+    mock (see "API patterns" above). Since `ValidationException` → `400` translation now happens
+    in the global `ValidationExceptionHandler` (see "API patterns" above) rather than in the
+    controller, a direct in-process controller-method call can't observe the `400` — these tests
+    instead assert the exception propagates unchanged (`Assert.ThrowsAsync<ValidationException>
+    (() => _controller.Create(...))`). The actual `400`/`ProblemDetails` translation is verified
+    by the system tests below instead, which go through the real pipeline.
   - **Repository tests** (`MnemoToad.Knowledge.Tests/Repositories/`) exist for all five entities that
     have their own repository (`NodeTypeRepositoryTests`, `KnowledgeNodeRepositoryTests`,
     `RelationshipTypeRepositoryTests`, `KnowledgeRelationRepositoryTests`,

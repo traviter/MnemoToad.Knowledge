@@ -74,19 +74,12 @@ public class RelationshipTypesControllerTests
     }
 
     [Test]
-    public async Task Create_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Create_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.CreateAsync(It.IsAny<RelationshipType>()))
             .ThrowsAsync(new ValidationException("A RelationshipType with that name already exists."));
 
-        var result = await _controller.Create(new RelationshipTypeRequest("parentOf", null, null));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("A RelationshipType with that name already exists."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new RelationshipTypeRequest("parentOf", null, null)));
     }
 
     [Test]
@@ -114,19 +107,12 @@ public class RelationshipTypesControllerTests
     }
 
     [Test]
-    public async Task Update_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Update_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.UpdateAsync(It.IsAny<RelationshipType>()))
             .ThrowsAsync(new ValidationException("A RelationshipType with that name already exists."));
 
-        var result = await _controller.Update(Guid.NewGuid(), new RelationshipTypeRequest("parentOf", null, null));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("A RelationshipType with that name already exists."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Update(Guid.NewGuid(), new RelationshipTypeRequest("parentOf", null, null)));
     }
 
     [Test]
@@ -150,18 +136,11 @@ public class RelationshipTypesControllerTests
     }
 
     [Test]
-    public async Task Delete_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Delete_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.DeleteAsync(It.IsAny<Guid>()))
             .ThrowsAsync(new ValidationException("The RelationshipType cannot be deleted because it is referenced by one or more KnowledgeRelations."));
 
-        var result = await _controller.Delete(Guid.NewGuid());
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("The RelationshipType cannot be deleted because it is referenced by one or more KnowledgeRelations."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Delete(Guid.NewGuid()));
     }
 }

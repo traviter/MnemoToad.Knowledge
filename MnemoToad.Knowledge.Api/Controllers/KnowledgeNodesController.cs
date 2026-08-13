@@ -61,22 +61,15 @@ public class KnowledgeNodesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(KnowledgeNodeRequest request)
     {
-        try
+        var created = await _repository.CreateAsync(new KnowledgeNode
         {
-            var created = await _repository.CreateAsync(new KnowledgeNode
-            {
-                NodeTypeId = request.NodeTypeId!.Value,
-                CanonicalName = request.CanonicalName,
-                Description = request.Description,
-                Attributes = request.Attributes ?? new(),
-                Media = request.Media ?? new()
-            });
-            return Created($"/nodes/{created.Id}", created);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+            NodeTypeId = request.NodeTypeId!.Value,
+            CanonicalName = request.CanonicalName,
+            Description = request.Description,
+            Attributes = request.Attributes ?? new(),
+            Media = request.Media ?? new()
+        });
+        return Created($"/nodes/{created.Id}", created);
     }
 
     /// <summary>
@@ -99,23 +92,16 @@ public class KnowledgeNodesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, KnowledgeNodeRequest request)
     {
-        try
+        var updated = await _repository.UpdateAsync(new KnowledgeNode
         {
-            var updated = await _repository.UpdateAsync(new KnowledgeNode
-            {
-                Id = id,
-                NodeTypeId = request.NodeTypeId!.Value,
-                CanonicalName = request.CanonicalName,
-                Description = request.Description,
-                Attributes = request.Attributes ?? new(),
-                Media = request.Media ?? new()
-            });
-            return updated is not null ? Ok(updated) : NotFound();
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+            Id = id,
+            NodeTypeId = request.NodeTypeId!.Value,
+            CanonicalName = request.CanonicalName,
+            Description = request.Description,
+            Attributes = request.Attributes ?? new(),
+            Media = request.Media ?? new()
+        });
+        return updated is not null ? Ok(updated) : NotFound();
     }
 
     /// <summary>
@@ -132,17 +118,8 @@ public class KnowledgeNodesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        try
-        {
-            return await _repository.DeleteAsync(id) ? NoContent() : NotFound();
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
-    }
+    public async Task<IActionResult> Delete(Guid id) =>
+        await _repository.DeleteAsync(id) ? NoContent() : NotFound();
 
     /// <summary>
     /// Resolves a batch of Property Path DSL expressions against KnowledgeNodes in one call. One

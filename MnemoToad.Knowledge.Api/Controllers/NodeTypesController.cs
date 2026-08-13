@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using MnemoToad.Knowledge.Api.Contracts;
 using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.Repositories;
-using System.ComponentModel.DataAnnotations;
 
 namespace MnemoToad.Knowledge.Api.Controllers;
 
@@ -49,15 +48,8 @@ public class NodeTypesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(NodeTypeRequest request)
     {
-        try
-        {
-            var created = await _repository.CreateAsync(new NodeType { Name = request.Name, Description = request.Description });
-            return Created($"/nodeTypes/{created.Id}", created);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+        var created = await _repository.CreateAsync(new NodeType { Name = request.Name, Description = request.Description });
+        return Created($"/nodeTypes/{created.Id}", created);
     }
 
     /// <summary>Replaces an existing NodeType's name and description.</summary>
@@ -74,15 +66,8 @@ public class NodeTypesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, NodeTypeRequest request)
     {
-        try
-        {
-            var updated = await _repository.UpdateAsync(new NodeType { Id = id, Name = request.Name, Description = request.Description });
-            return updated is not null ? Ok(updated) : NotFound();
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+        var updated = await _repository.UpdateAsync(new NodeType { Id = id, Name = request.Name, Description = request.Description });
+        return updated is not null ? Ok(updated) : NotFound();
     }
 
     /// <summary>Deletes a NodeType.</summary>
@@ -96,15 +81,6 @@ public class NodeTypesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        try
-        {
-            return await _repository.DeleteAsync(id) ? NoContent() : NotFound();
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
-    }
+    public async Task<IActionResult> Delete(Guid id) =>
+        await _repository.DeleteAsync(id) ? NoContent() : NotFound();
 }

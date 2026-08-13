@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using MnemoToad.Knowledge.Api.Contracts;
 using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.Repositories;
-using System.ComponentModel.DataAnnotations;
 
 namespace MnemoToad.Knowledge.Api.Controllers;
 
@@ -49,20 +48,13 @@ public class RelationshipTypesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(RelationshipTypeRequest request)
     {
-        try
+        var created = await _repository.CreateAsync(new RelationshipType
         {
-            var created = await _repository.CreateAsync(new RelationshipType
-            {
-                Name = request.Name,
-                InverseName = request.InverseName,
-                Description = request.Description
-            });
-            return Created($"/relationshipTypes/{created.Id}", created);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+            Name = request.Name,
+            InverseName = request.InverseName,
+            Description = request.Description
+        });
+        return Created($"/relationshipTypes/{created.Id}", created);
     }
 
     /// <summary>Replaces an existing RelationshipType's name, inverse name, and description.</summary>
@@ -79,21 +71,14 @@ public class RelationshipTypesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, RelationshipTypeRequest request)
     {
-        try
+        var updated = await _repository.UpdateAsync(new RelationshipType
         {
-            var updated = await _repository.UpdateAsync(new RelationshipType
-            {
-                Id = id,
-                Name = request.Name,
-                InverseName = request.InverseName,
-                Description = request.Description
-            });
-            return updated is not null ? Ok(updated) : NotFound();
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+            Id = id,
+            Name = request.Name,
+            InverseName = request.InverseName,
+            Description = request.Description
+        });
+        return updated is not null ? Ok(updated) : NotFound();
     }
 
     /// <summary>Deletes a RelationshipType.</summary>
@@ -107,15 +92,6 @@ public class RelationshipTypesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        try
-        {
-            return await _repository.DeleteAsync(id) ? NoContent() : NotFound();
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
-    }
+    public async Task<IActionResult> Delete(Guid id) =>
+        await _repository.DeleteAsync(id) ? NoContent() : NotFound();
 }

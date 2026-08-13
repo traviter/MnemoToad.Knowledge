@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using MnemoToad.Knowledge.Api.Contracts;
 using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.Repositories;
-using System.ComponentModel.DataAnnotations;
 
 namespace MnemoToad.Knowledge.Api.Controllers;
 
@@ -41,20 +40,13 @@ public class KnowledgeRelationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(KnowledgeRelationRequest request)
     {
-        try
+        var created = await _repository.CreateAsync(new KnowledgeRelation
         {
-            var created = await _repository.CreateAsync(new KnowledgeRelation
-            {
-                SourceNodeId = request.SourceNodeId!.Value,
-                RelationshipTypeId = request.RelationshipTypeId!.Value,
-                TargetNodeId = request.TargetNodeId!.Value
-            });
-            return Created($"/relationships/{created.Id}", created);
-        }
-        catch (ValidationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
-        }
+            SourceNodeId = request.SourceNodeId!.Value,
+            RelationshipTypeId = request.RelationshipTypeId!.Value,
+            TargetNodeId = request.TargetNodeId!.Value
+        });
+        return Created($"/relationships/{created.Id}", created);
     }
 
     /// <summary>Deletes a KnowledgeRelation. Nothing else references a relation, so this never fails on a constraint.</summary>

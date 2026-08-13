@@ -15,6 +15,10 @@ public static class ServiceCollectionExtensions
         services.AddControllers()
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new ScalarJsonValueConverter()));
 
+        // Translates a ValidationException escaping any action into a 400 ProblemDetails response.
+        services.AddExceptionHandler<ValidationExceptionHandler>();
+        services.AddProblemDetails();
+
         // Lets Swashbuckle discover our controllers' routes/parameters/response types.
         services.AddEndpointsApiExplorer();
         // Registers the OpenAPI document generator (built from the explorer data above).

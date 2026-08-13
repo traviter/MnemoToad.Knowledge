@@ -74,19 +74,12 @@ public class NodeTypesControllerTests
     }
 
     [Test]
-    public async Task Create_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Create_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.CreateAsync(It.IsAny<NodeType>()))
             .ThrowsAsync(new ValidationException("A NodeType with that name already exists."));
 
-        var result = await _controller.Create(new NodeTypeRequest("Person", null));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("A NodeType with that name already exists."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new NodeTypeRequest("Person", null)));
     }
 
     [Test]
@@ -114,19 +107,12 @@ public class NodeTypesControllerTests
     }
 
     [Test]
-    public async Task Update_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Update_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.UpdateAsync(It.IsAny<NodeType>()))
             .ThrowsAsync(new ValidationException("A NodeType with that name already exists."));
 
-        var result = await _controller.Update(Guid.NewGuid(), new NodeTypeRequest("Person", null));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("A NodeType with that name already exists."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Update(Guid.NewGuid(), new NodeTypeRequest("Person", null)));
     }
 
     [Test]
@@ -150,18 +136,11 @@ public class NodeTypesControllerTests
     }
 
     [Test]
-    public async Task Delete_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Delete_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.DeleteAsync(It.IsAny<Guid>()))
             .ThrowsAsync(new ValidationException("The NodeType cannot be deleted because it is referenced by one or more KnowledgeNodes."));
 
-        var result = await _controller.Delete(Guid.NewGuid());
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("The NodeType cannot be deleted because it is referenced by one or more KnowledgeNodes."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Delete(Guid.NewGuid()));
     }
 }

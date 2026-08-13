@@ -62,19 +62,12 @@ public class KnowledgeRelationsControllerTests
     }
 
     [Test]
-    public async Task Create_WhenRepositoryThrowsValidationException_ReturnsProblem400()
+    public void Create_WhenRepositoryThrowsValidationException_PropagatesException()
     {
         _repository.Setup(r => r.CreateAsync(It.IsAny<KnowledgeRelation>()))
             .ThrowsAsync(new ValidationException("The specified source KnowledgeNode does not exist."));
 
-        var result = await _controller.Create(new KnowledgeRelationRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()));
-
-        var objectResult = result as ObjectResult;
-        Assert.That(objectResult, Is.Not.Null);
-        Assert.That(objectResult!.StatusCode, Is.EqualTo(400));
-        var problem = objectResult.Value as ProblemDetails;
-        Assert.That(problem, Is.Not.Null);
-        Assert.That(problem!.Detail, Is.EqualTo("The specified source KnowledgeNode does not exist."));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new KnowledgeRelationRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid())));
     }
 
     [Test]
