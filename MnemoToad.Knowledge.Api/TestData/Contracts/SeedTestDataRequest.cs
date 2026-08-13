@@ -20,7 +20,7 @@ public record TestKnowledgeNode(
     Guid NodeTypeId,
     string CanonicalName,
     string? Description = null,
-    Dictionary<string, JsonValue?>? Attributes = null,
-    Dictionary<string, JsonObject?>? Media = null);
+    Dictionary<string, JsonValue>? Attributes = null,
+    Dictionary<string, JsonObject>? Media = null);
 
 public record TestKnowledgeRelation(Guid Id, Guid SourceNodeId, Guid RelationshipTypeId, Guid TargetNodeId);

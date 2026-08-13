@@ -59,7 +59,7 @@ public class KnowledgeNodesControllerSystemTests
     public async Task Create_WithAttributes_RoundTripsAttributesThroughTheRealStack()
     {
         var nodeType = await _factory.Db.CreateNodeTypeAsync();
-        var attributes = new Dictionary<string, JsonValue?>
+        var attributes = new Dictionary<string, JsonValue>
         {
             ["isoCode"] = JsonValue.Create("FR"),
             ["population"] = JsonValue.Create(68000000),
@@ -84,11 +84,11 @@ public class KnowledgeNodesControllerSystemTests
     {
         var nodeType = await _factory.Db.CreateNodeTypeAsync();
         var createResponse = await _client.PostAsJsonAsync("/nodes", new KnowledgeNodeRequest(nodeType.Id, "France", null,
-            new Dictionary<string, JsonValue?> { ["isoCode"] = JsonValue.Create("FR"), ["population"] = JsonValue.Create(68000000) }));
+            new Dictionary<string, JsonValue> { ["isoCode"] = JsonValue.Create("FR"), ["population"] = JsonValue.Create(68000000) }));
         var created = await createResponse.Content.ReadFromJsonAsync<KnowledgeNode>();
 
         var updateResponse = await _client.PutAsJsonAsync($"/nodes/{created!.Id}", new KnowledgeNodeRequest(nodeType.Id, "France", null,
-            new Dictionary<string, JsonValue?> { ["isoCode"] = JsonValue.Create("FR"), ["isEuMember"] = JsonValue.Create(true) }));
+            new Dictionary<string, JsonValue> { ["isoCode"] = JsonValue.Create("FR"), ["isEuMember"] = JsonValue.Create(true) }));
         var updated = await updateResponse.Content.ReadFromJsonAsync<KnowledgeNode>();
 
         Assert.That(updateResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -102,7 +102,7 @@ public class KnowledgeNodesControllerSystemTests
         var mediaAssetId = Guid.NewGuid();
 
         var createResponse = await _client.PostAsJsonAsync("/nodes", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = mediaAssetId.ToString(), ["alt_text"] = "Flag of France" } }));
+            new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = mediaAssetId.ToString(), ["alt_text"] = "Flag of France" } }));
         var created = await createResponse.Content.ReadFromJsonAsync<KnowledgeNode>();
 
         Assert.That(createResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
@@ -121,7 +121,7 @@ public class KnowledgeNodesControllerSystemTests
         var mediaAssetId = Guid.NewGuid();
 
         var createResponse = await _client.PostAsJsonAsync("/nodes", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?>
+            new Dictionary<string, JsonObject>
             {
                 ["flag"] = new JsonObject { ["id"] = mediaAssetId.ToString(), ["alt_text"] = "Flag of France", ["other_metadata"] = 2323 }
             }));
@@ -140,11 +140,11 @@ public class KnowledgeNodesControllerSystemTests
     {
         var nodeType = await _factory.Db.CreateNodeTypeAsync();
         var createResponse = await _client.PostAsJsonAsync("/nodes", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Flag of France" } }));
+            new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Flag of France" } }));
         var created = await createResponse.Content.ReadFromJsonAsync<KnowledgeNode>();
 
         var updateResponse = await _client.PutAsJsonAsync($"/nodes/{created!.Id}", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?> { ["photo"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Eiffel Tower" } }));
+            new Dictionary<string, JsonObject> { ["photo"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Eiffel Tower" } }));
         var updated = await updateResponse.Content.ReadFromJsonAsync<KnowledgeNode>();
 
         Assert.That(updateResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -157,7 +157,7 @@ public class KnowledgeNodesControllerSystemTests
         var nodeType = await _factory.Db.CreateNodeTypeAsync();
 
         var response = await _client.PostAsJsonAsync("/nodes", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["alt_text"] = "Flag of France" } }));
+            new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["alt_text"] = "Flag of France" } }));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
@@ -170,7 +170,7 @@ public class KnowledgeNodesControllerSystemTests
         var nodeType = await _factory.Db.CreateNodeTypeAsync();
 
         var response = await _client.PostAsJsonAsync("/nodes", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString() } }));
+            new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString() } }));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
@@ -184,7 +184,7 @@ public class KnowledgeNodesControllerSystemTests
         _factory.Db.ThrowOnSaveChanges(PostgresExceptionFactory.UniqueViolation(constraintName: "uq_knowledge_node_media_media_asset_id"));
 
         var response = await _client.PostAsJsonAsync("/nodes", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } }));
+            new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } }));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
@@ -199,7 +199,7 @@ public class KnowledgeNodesControllerSystemTests
         _factory.Db.ThrowOnSaveChanges(PostgresExceptionFactory.UniqueViolation(constraintName: "uq_knowledge_node_media_media_asset_id"));
 
         var response = await _client.PutAsJsonAsync($"/nodes/{knowledgeNode.Id}", new KnowledgeNodeRequest(nodeType.Id, "France", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } }));
+            new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } }));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();

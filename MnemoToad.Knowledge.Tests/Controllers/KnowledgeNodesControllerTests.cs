@@ -84,7 +84,7 @@ public class KnowledgeNodesControllerTests
     public async Task Create_WithAttributes_PassesAttributesToRepository()
     {
         var nodeTypeId = Guid.NewGuid();
-        var attributes = new Dictionary<string, JsonValue?> { ["isoCode"] = JsonValue.Create("FR") };
+        var attributes = new Dictionary<string, JsonValue> { ["isoCode"] = JsonValue.Create("FR") };
         var created = new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "France", Attributes = attributes };
         _repository.Setup(r => r.CreateAsync(It.Is<KnowledgeNode>(n => n.Attributes == attributes)))
             .ReturnsAsync(created);
@@ -113,7 +113,7 @@ public class KnowledgeNodesControllerTests
     public async Task Create_WithMedia_PassesMediaDictionaryThroughUnchanged()
     {
         var nodeTypeId = Guid.NewGuid();
-        var media = new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Flag of France" } };
+        var media = new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Flag of France" } };
         var created = new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "France" };
         _repository.Setup(r => r.CreateAsync(It.Is<KnowledgeNode>(n => n.Media == media)))
             .ReturnsAsync(created);
@@ -154,7 +154,7 @@ public class KnowledgeNodesControllerTests
             .ThrowsAsync(new ValidationException("The specified MediaAsset is already linked to another KnowledgeNode."));
 
         Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new KnowledgeNodeRequest(Guid.NewGuid(), "Mercury", null, null,
-            new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } })));
+            new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "x" } })));
     }
 
     [Test]
@@ -175,7 +175,7 @@ public class KnowledgeNodesControllerTests
     public async Task Update_WithAttributes_PassesAttributesToRepository()
     {
         var id = Guid.NewGuid();
-        var attributes = new Dictionary<string, JsonValue?> { ["isoCode"] = JsonValue.Create("FR") };
+        var attributes = new Dictionary<string, JsonValue> { ["isoCode"] = JsonValue.Create("FR") };
         var updated = new KnowledgeNode { Id = id, CanonicalName = "France", Attributes = attributes };
         _repository.Setup(r => r.UpdateAsync(It.Is<KnowledgeNode>(n => n.Id == id && n.Attributes == attributes)))
             .ReturnsAsync(updated);
@@ -191,7 +191,7 @@ public class KnowledgeNodesControllerTests
     public async Task Update_WithMedia_PassesMediaDictionaryThroughUnchanged()
     {
         var id = Guid.NewGuid();
-        var media = new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Flag of France" } };
+        var media = new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = "Flag of France" } };
         var updated = new KnowledgeNode { Id = id, CanonicalName = "France" };
         _repository.Setup(r => r.UpdateAsync(It.Is<KnowledgeNode>(n => n.Id == id && n.Media == media)))
             .ReturnsAsync(updated);

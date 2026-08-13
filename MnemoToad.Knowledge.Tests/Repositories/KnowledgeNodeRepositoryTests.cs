@@ -137,7 +137,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "France",
-            Attributes = new Dictionary<string, JsonValue?> { ["isoCode"] = JsonValue.Create("FR") }
+            Attributes = new Dictionary<string, JsonValue> { ["isoCode"] = JsonValue.Create("FR") }
         };
 
         await _repository.CreateAsync(knowledgeNode);
@@ -155,7 +155,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "France",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = MediaStanza(mediaAssetId, "Flag of France") }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = MediaStanza(mediaAssetId, "Flag of France") }
         };
 
         var created = await _repository.CreateAsync(knowledgeNode);
@@ -177,7 +177,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "France",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = stanza }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = stanza }
         };
 
         var created = await _repository.CreateAsync(knowledgeNode);
@@ -192,7 +192,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["alt_text"] = "x" } }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["alt_text"] = "x" } }
         };
 
         var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.CreateAsync(knowledgeNode));
@@ -207,7 +207,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = "not-a-guid", ["alt_text"] = "x" } }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = "not-a-guid", ["alt_text"] = "x" } }
         };
 
         var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.CreateAsync(knowledgeNode));
@@ -222,7 +222,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString() } }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString() } }
         };
 
         var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.CreateAsync(knowledgeNode));
@@ -237,7 +237,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = 123 } }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = 123 } }
         };
 
         var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.CreateAsync(knowledgeNode));
@@ -284,7 +284,7 @@ public class KnowledgeNodeRepositoryTests
             Id = knowledgeNode.Id,
             NodeTypeId = nodeTypeId,
             CanonicalName = "France",
-            Attributes = new Dictionary<string, JsonValue?>
+            Attributes = new Dictionary<string, JsonValue>
             {
                 ["isoCode"] = JsonValue.Create("FR-NEW"),
                 ["isEuMember"] = JsonValue.Create(true)
@@ -318,7 +318,7 @@ public class KnowledgeNodeRepositoryTests
             Id = knowledgeNode.Id,
             NodeTypeId = nodeTypeId,
             CanonicalName = "France",
-            Media = new Dictionary<string, JsonObject?>
+            Media = new Dictionary<string, JsonObject>
             {
                 ["flag"] = MediaStanza(newFlagAssetId, "New flag"),
                 ["photo"] = MediaStanza(photoAssetId, "Eiffel Tower")
@@ -376,7 +376,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Attributes = new Dictionary<string, JsonValue?> { ["isoCode"] = JsonValue.Create("FR") }
+            Attributes = new Dictionary<string, JsonValue> { ["isoCode"] = JsonValue.Create("FR") }
         }));
 
         Assert.That(ex!.Message, Is.EqualTo("An attribute with that key already exists for this KnowledgeNode."));
@@ -391,7 +391,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = MediaStanza(Guid.NewGuid(), "x") }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = MediaStanza(Guid.NewGuid(), "x") }
         }));
 
         Assert.That(ex!.Message, Is.EqualTo("A media entry with that key already exists for this KnowledgeNode."));
@@ -406,7 +406,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Media = new Dictionary<string, JsonObject?> { ["flag"] = MediaStanza(Guid.NewGuid(), "x") }
+            Media = new Dictionary<string, JsonObject> { ["flag"] = MediaStanza(Guid.NewGuid(), "x") }
         }));
 
         Assert.That(ex!.Message, Is.EqualTo("The specified MediaAsset is already linked to another KnowledgeNode."));
@@ -445,7 +445,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Attributes = new Dictionary<string, JsonValue?> { ["iso-code"] = JsonValue.Create("FR") }
+            Attributes = new Dictionary<string, JsonValue> { ["iso-code"] = JsonValue.Create("FR") }
         }));
 
         Assert.That(ex!.Message, Is.EqualTo("An attribute key must contain only letters."));
@@ -460,7 +460,7 @@ public class KnowledgeNodeRepositoryTests
         {
             Id = Guid.NewGuid(),
             CanonicalName = "Mercury",
-            Media = new Dictionary<string, JsonObject?> { ["flag2"] = MediaStanza(Guid.NewGuid(), "x") }
+            Media = new Dictionary<string, JsonObject> { ["flag2"] = MediaStanza(Guid.NewGuid(), "x") }
         }));
 
         Assert.That(ex!.Message, Is.EqualTo("A media key must contain only letters."));
