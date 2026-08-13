@@ -15,33 +15,8 @@ public class MediaTerminalResolver : ITerminalResolver
     public async Task<Result<JsonNode>> ResolveAsync(IQueryable<KnowledgeNode> targetNode, string terminalName)
     {
         var media = await _queryTransform.Transform(targetNode, terminalName).FirstOrDefaultAsync();
-        if (media is null)
-            return new Error("Path could not be resolved.");
-
-        var result = new JsonObject
-        {
-            ["id"] = media.MediaAssetId.ToString(),
-            ["alt_text"] = media.AltText
-        };
-        var extra = ExtractExtraMetadata(media.Metadata);
-        if (extra is { Count: > 0 })
-            result["metadata"] = extra;
-
-        return result;
-    }
-
-    private static JsonObject? ExtractExtraMetadata(JsonObject? stored)
-    {
-        if (stored is null)
-            return null;
-
-        var extra = new JsonObject();
-        foreach (var (key, value) in stored)
-        {
-            if (key is "id" or "alt_text")
-                continue;
-            extra[key] = value?.DeepClone();
-        }
-        return extra;
+        return media is null
+            ? new Error("Path could not be resolved.")
+            : media.ToJson();
     }
 }

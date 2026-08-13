@@ -155,7 +155,7 @@ public class PathResolutionRepositoryTests
     }
 
     [Test]
-    public async Task ResolveAsync_MediaWithExtraMetadata_ReturnsMetadataWithRedundantFieldsStripped()
+    public async Task ResolveAsync_MediaWithExtraFields_ReturnsAllFieldsFlat()
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
@@ -170,9 +170,8 @@ public class PathResolutionRepositoryTests
         var value = result.Value!.AsObject();
         Assert.That(value["id"]!.GetValue<string>(), Is.EqualTo(mediaAsset.Id.ToString()));
         Assert.That(value["alt_text"]!.GetValue<string>(), Is.EqualTo("A coat of arms"));
-        Assert.That(value["metadata"]!["credit"]!.GetValue<string>(), Is.EqualTo("Wikimedia Commons"));
-        Assert.That(value["metadata"]!.AsObject().ContainsKey("id"), Is.False);
-        Assert.That(value["metadata"]!.AsObject().ContainsKey("alt_text"), Is.False);
+        Assert.That(value["credit"]!.GetValue<string>(), Is.EqualTo("Wikimedia Commons"));
+        Assert.That(value.ContainsKey("metadata"), Is.False);
     }
 
     [Test]

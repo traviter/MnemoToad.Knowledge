@@ -122,10 +122,10 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
         return existing;
     }
 
-    private async Task<Dictionary<string, JsonObject?>> GetMediaAsync(Guid knowledgeNodeId)
+    private async Task<Dictionary<string, JsonObject>> GetMediaAsync(Guid knowledgeNodeId)
     {
         var rows = await _db.KnowledgeNodeMedia.Where(m => m.KnowledgeNodeId == knowledgeNodeId).ToListAsync();
-        return rows.ToDictionary(r => r.Key, r => r.Metadata);
+        return rows.ToDictionary(r => r.Key, r => r.ToJson());
     }
 
     private static (Guid MediaAssetId, string AltText) ExtractMediaFields(string key, JsonObject? stanza)

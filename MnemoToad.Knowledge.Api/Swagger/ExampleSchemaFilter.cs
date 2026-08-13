@@ -142,7 +142,7 @@ public class ExampleSchemaFilter : ISchemaFilter
                     {
                         ["id"] = "d4e5f6a7-b8c9-4012-9abc-def01234567b",
                         ["alt_text"] = "The coat of arms of Paris",
-                        ["metadata"] = new JsonObject { ["credit"] = "Wikimedia Commons" },
+                        ["credit"] = "Wikimedia Commons",
                     },
                 },
                 ["errors"] = new JsonObject

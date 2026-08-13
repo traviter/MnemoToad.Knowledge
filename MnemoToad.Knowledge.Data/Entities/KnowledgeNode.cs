@@ -33,5 +33,5 @@ public class KnowledgeNode
     /// responses — only present when fetching a single node.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Dictionary<string, JsonObject?>? Media { get; set; }
+    public Dictionary<string, JsonObject>? Media { get; set; }
 }

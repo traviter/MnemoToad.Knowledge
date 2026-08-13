@@ -7,8 +7,8 @@ namespace MnemoToad.Knowledge.Api.Contracts;
 /// <param name="NodeId">The KnowledgeNode the paths were resolved against, echoed back from the request.</param>
 /// <param name="Properties">
 /// The paths that resolved successfully, keyed by the exact path string from the request. A
-/// column/attribute path's value is a scalar; a media path's value is an
-/// <c>{ id, alt_text, metadata }</c> object.
+/// column/attribute path's value is a scalar; a media path's value is the stored media stanza
+/// (<c>id</c>, <c>alt_text</c>, and any other client-supplied fields, all flat).
 /// </param>
 /// <param name="Errors">
 /// The paths that couldn't be resolved (node not found, an edge in the path doesn't match any
