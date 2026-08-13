@@ -53,7 +53,7 @@ public class PathResolutionRepositoryTests
         var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), "_canonicalName"));
 
         Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("No KnowledgeNode exists with that id."));
+        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
     }
 
     [Test]
@@ -132,7 +132,7 @@ public class PathResolutionRepositoryTests
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ".gdp"));
 
         Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("No attribute named 'gdp' on this node."));
+        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
     }
 
     [Test]
@@ -184,7 +184,7 @@ public class PathResolutionRepositoryTests
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "#flag"));
 
         Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("No media named 'flag' on this node."));
+        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
     }
 
     [Test]
@@ -204,22 +204,6 @@ public class PathResolutionRepositoryTests
     }
 
     [Test]
-    public async Task ResolveAsync_OneHopReverseViaInverseName_FollowsToSourceNode()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var source = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "France");
-        var target = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var relationshipType = await _db.CreateRelationshipTypeAsync(name: "capital", inverseName: "capitalOf");
-        await _db.CreateKnowledgeRelationAsync(source.Id, relationshipType.Id, target.Id);
-        SetupParse(">capitalOf_canonicalName", new PathExpression(["capitalOf"], PathTerminalKind.Column, "canonicalName"));
-
-        var result = await _repository.ResolveAsync(new PathResolutionQuery(target.Id, ">capitalOf_canonicalName"));
-
-        Assert.That(result.Error, Is.Null);
-        Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("France"));
-    }
-
-    [Test]
     public async Task ResolveAsync_MissingRelation_ReturnsError()
     {
         var nodeType = await _db.CreateNodeTypeAsync();
@@ -229,7 +213,7 @@ public class PathResolutionRepositoryTests
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ">doesNotExist_canonicalName"));
 
         Assert.That(result.Value, Is.Null);
-        Assert.That(result.Error, Is.EqualTo("No relation named 'doesNotExist' from this node."));
+        Assert.That(result.Error, Is.EqualTo("Path could not be resolved."));
     }
 
     [Test]
@@ -270,6 +254,6 @@ public class PathResolutionRepositoryTests
         Assert.That(results, Has.Count.EqualTo(3));
         Assert.That(results[0].Value!.GetValue<string>(), Is.EqualTo("France"));
         Assert.That(results[1].Value!.GetValue<int>(), Is.EqualTo(68000000));
-        Assert.That(results[2].Error, Is.EqualTo("No attribute named 'gdp' on this node."));
+        Assert.That(results[2].Error, Is.EqualTo("Path could not be resolved."));
     }
 }

@@ -147,7 +147,7 @@ public class ExampleSchemaFilter : ISchemaFilter
                 },
                 ["errors"] = new JsonObject
                 {
-                    [".gdp"] = "No attribute named 'gdp' on this node.",
+                    [".gdp"] = "Path could not be resolved.",
                 },
             },
             new JsonObject
@@ -156,7 +156,7 @@ public class ExampleSchemaFilter : ISchemaFilter
                 ["properties"] = new JsonObject(),
                 ["errors"] = new JsonObject
                 {
-                    ["_canonicalName"] = "No KnowledgeNode exists with that id.",
+                    ["_canonicalName"] = "Path could not be resolved.",
                 },
             },
         },

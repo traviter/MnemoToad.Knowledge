@@ -6,7 +6,7 @@
     {
       "nodeId": "55555555-5555-5555-5555-555555555555",
       "properties": {},
-      "errors": { ">doesNotExist_canonicalName": "No relation named 'doesNotExist' from this node." }
+      "errors": { ">doesNotExist_canonicalName": "Path could not be resolved." }
     }
   ]
 }

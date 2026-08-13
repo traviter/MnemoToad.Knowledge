@@ -7,8 +7,8 @@
       "nodeId": "00000000-0000-0000-0000-000000000000",
       "properties": {},
       "errors": {
-        "_canonicalName": "No KnowledgeNode exists with that id.",
-        ".population": "No KnowledgeNode exists with that id."
+        "_canonicalName": "Path could not be resolved.",
+        ".population": "Path could not be resolved."
       }
     }
   ]
