@@ -1,8 +1,9 @@
+using Moq;
+using MockQueryable;
 using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
-using MnemoToad.Knowledge.Tests.TestSupport;
 using NUnit.Framework;
 using System.Text.Json.Nodes;
 
@@ -11,66 +12,58 @@ namespace MnemoToad.Knowledge.Tests.TerminalResolvers;
 [TestFixture]
 public class MediaTerminalResolverTests
 {
-    private MockableAppDbContext _db = null!;
+    private Mock<IQueryTransform<KnowledgeNode, KnowledgeNodeMedia>> _queryTransform = null!;
     private MediaTerminalResolver _resolver = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _db = new MockableAppDbContext();
-        _resolver = new MediaTerminalResolver(new MediaQueryTransform(_db));
+        _queryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNodeMedia>>();
+        _resolver = new MediaTerminalResolver(_queryTransform.Object);
     }
 
-    [TearDown]
-    public void TearDown() => _db.Dispose();
-
-    private IQueryable<KnowledgeNode> TargetNode(Guid id) => _db.KnowledgeNode.Where(n => n.Id == id);
-
     [Test]
-    public async Task ResolveAsync_MediaWithNoExtraFields_ReturnsIdAndAltTextOnly()
+    public async Task ResolveAsync_TransformYieldsRow_ReturnsItsJson()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var mediaAsset = await _db.CreateMediaAssetAsync();
-        await _db.CreateKnowledgeNodeMediaAsync(node.Id, "flag", mediaAsset.Id, "A flag");
+        var mediaAssetId = Guid.NewGuid();
+        var row = new KnowledgeNodeMedia { KnowledgeNodeId = Guid.NewGuid(), Key = "flag", MediaAssetId = mediaAssetId, AltText = "A flag" };
+        _queryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "flag"))
+            .Returns(new[] { row }.BuildMock());
 
-        var result = await _resolver.ResolveAsync(TargetNode(node.Id), "flag");
+        var result = await _resolver.ResolveAsync(Enumerable.Empty<KnowledgeNode>().AsQueryable(), "flag");
 
         var success = result as Result<JsonNode>.Success;
         Assert.That(success, Is.Not.Null);
         var value = success!.Value.AsObject();
-        Assert.That(value["id"]!.GetValue<string>(), Is.EqualTo(mediaAsset.Id.ToString()));
+        Assert.That(value["id"]!.GetValue<string>(), Is.EqualTo(mediaAssetId.ToString()));
         Assert.That(value["alt_text"]!.GetValue<string>(), Is.EqualTo("A flag"));
     }
 
     [Test]
-    public async Task ResolveAsync_MediaWithExtraFields_ReturnsAllFieldsFlat()
+    public async Task ResolveAsync_TransformYieldsNoRows_ReturnsFailure()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var mediaAsset = await _db.CreateMediaAssetAsync();
-        await _db.CreateKnowledgeNodeMediaAsync(node.Id, "coatOfArms", mediaAsset.Id, "A coat of arms",
-            new JsonObject { ["id"] = mediaAsset.Id.ToString(), ["alt_text"] = "A coat of arms", ["credit"] = "Wikimedia Commons" });
+        _queryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "flag"))
+            .Returns(Array.Empty<KnowledgeNodeMedia>().BuildMock());
 
-        var result = await _resolver.ResolveAsync(TargetNode(node.Id), "coatOfArms");
-
-        var success = result as Result<JsonNode>.Success;
-        Assert.That(success, Is.Not.Null);
-        var value = success!.Value.AsObject();
-        Assert.That(value["credit"]!.GetValue<string>(), Is.EqualTo("Wikimedia Commons"));
-        Assert.That(value.ContainsKey("metadata"), Is.False);
-    }
-
-    [Test]
-    public async Task ResolveAsync_MediaMissing_ReturnsFailure()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-
-        var result = await _resolver.ResolveAsync(TargetNode(node.Id), "flag");
+        var result = await _resolver.ResolveAsync(Enumerable.Empty<KnowledgeNode>().AsQueryable(), "flag");
 
         var failure = result as Result<JsonNode>.Failure;
         Assert.That(failure, Is.Not.Null);
         Assert.That(failure!.Message, Is.EqualTo("Path could not be resolved."));
+    }
+
+    [Test]
+    public async Task ResolveAsync_PassesSourceAndTerminalNameToTransform()
+    {
+        var source = Enumerable.Empty<KnowledgeNode>().AsQueryable();
+        _queryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "flag"))
+            .Returns(Array.Empty<KnowledgeNodeMedia>().BuildMock());
+
+        await _resolver.ResolveAsync(source, "flag");
+
+        _queryTransform.Verify(t => t.Transform(source, "flag"), Times.Once);
     }
 }

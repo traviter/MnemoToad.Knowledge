@@ -1,8 +1,9 @@
+using Moq;
+using MockQueryable;
 using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
-using MnemoToad.Knowledge.Tests.TestSupport;
 using NUnit.Framework;
 using System.Text.Json.Nodes;
 
@@ -11,29 +12,25 @@ namespace MnemoToad.Knowledge.Tests.TerminalResolvers;
 [TestFixture]
 public class AttributeTerminalResolverTests
 {
-    private MockableAppDbContext _db = null!;
+    private Mock<IQueryTransform<KnowledgeNode, KnowledgeNodeAttribute>> _queryTransform = null!;
     private AttributeTerminalResolver _resolver = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _db = new MockableAppDbContext();
-        _resolver = new AttributeTerminalResolver(new AttributeQueryTransform(_db));
+        _queryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNodeAttribute>>();
+        _resolver = new AttributeTerminalResolver(_queryTransform.Object);
     }
 
-    [TearDown]
-    public void TearDown() => _db.Dispose();
-
-    private IQueryable<KnowledgeNode> TargetNode(Guid id) => _db.KnowledgeNode.Where(n => n.Id == id);
-
     [Test]
-    public async Task ResolveAsync_AttributeExists_ReturnsStoredValue()
+    public async Task ResolveAsync_TransformYieldsRow_ReturnsItsValue()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        await _db.CreateKnowledgeNodeAttributeAsync(node.Id, "population", JsonValue.Create(68000000));
+        var row = new KnowledgeNodeAttribute { KnowledgeNodeId = Guid.NewGuid(), Key = "population", Value = JsonValue.Create(68000000)! };
+        _queryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "population"))
+            .Returns(new[] { row }.BuildMock());
 
-        var result = await _resolver.ResolveAsync(TargetNode(node.Id), "population");
+        var result = await _resolver.ResolveAsync(Enumerable.Empty<KnowledgeNode>().AsQueryable(), "population");
 
         var success = result as Result<JsonNode>.Success;
         Assert.That(success, Is.Not.Null);
@@ -41,12 +38,13 @@ public class AttributeTerminalResolverTests
     }
 
     [Test]
-    public async Task ResolveAsync_AttributeMissing_ReturnsFailure()
+    public async Task ResolveAsync_TransformYieldsNoRows_ReturnsFailure()
     {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
+        _queryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "gdp"))
+            .Returns(Array.Empty<KnowledgeNodeAttribute>().BuildMock());
 
-        var result = await _resolver.ResolveAsync(TargetNode(node.Id), "gdp");
+        var result = await _resolver.ResolveAsync(Enumerable.Empty<KnowledgeNode>().AsQueryable(), "gdp");
 
         var failure = result as Result<JsonNode>.Failure;
         Assert.That(failure, Is.Not.Null);
@@ -54,12 +52,15 @@ public class AttributeTerminalResolverTests
     }
 
     [Test]
-    public async Task ResolveAsync_NoMatchingNode_ReturnsFailure()
+    public async Task ResolveAsync_PassesSourceAndTerminalNameToTransform()
     {
-        var result = await _resolver.ResolveAsync(TargetNode(Guid.NewGuid()), "population");
+        var source = Enumerable.Empty<KnowledgeNode>().AsQueryable();
+        _queryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "population"))
+            .Returns(Array.Empty<KnowledgeNodeAttribute>().BuildMock());
 
-        var failure = result as Result<JsonNode>.Failure;
-        Assert.That(failure, Is.Not.Null);
-        Assert.That(failure!.Message, Is.EqualTo("Path could not be resolved."));
+        await _resolver.ResolveAsync(source, "population");
+
+        _queryTransform.Verify(t => t.Transform(source, "population"), Times.Once);
     }
 }

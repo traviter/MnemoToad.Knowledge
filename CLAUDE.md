@@ -845,14 +845,58 @@
     `ITerminalResolver.ResolveAsync` intercepts before the composed-but-unexecuted `IQueryable`
     chain is ever enumerated — the still-required `IAppDbContext` constructor parameter is a real
     (but untouched) `MockableAppDbContext`, present purely because the constructor demands one.
-    The three `ITerminalResolver` implementations and the three `IQueryTransform` implementations
-    each have their own dedicated test files too (`TerminalResolvers/`/`QueryTransforms/` under
-    `MnemoToad.Knowledge.Tests/`, mirroring the source folders) — these DO touch a real DB (each
-    calls `.FirstOrDefaultAsync()`/`.ToListAsync()` on a query it builds itself, which a Moq'd
-    `IQueryable` can't satisfy), so they're built against `MockableAppDbContext`/`DbFixtures` like
-    the ordinary repository tests, not fully mocked. `TerminalResolverFactory`, `Result<T>`/`Error`,
-    and `KnowledgeNodeMediaExtensions.ToJson()` have their own test files too — the latter two touch
-    no DB at all and are plain isolated unit tests.
+    The three `IQueryTransform` implementations each have their own dedicated test file too
+    (`QueryTransforms/` under `MnemoToad.Knowledge.Tests/`, mirroring the source folder) — these DO
+    touch a real DB (each calls `.FirstOrDefaultAsync()`/`.ToListAsync()` on a query it builds
+    itself, which a Moq'd `IQueryable` can't satisfy), so they're built against
+    `MockableAppDbContext`/`DbFixtures` like the ordinary repository tests. `IQueryTransform`'s own
+    only dependency is `IAppDbContext` directly, so that's still a genuine, first-level-only unit
+    test, not a component test in disguise.
+  - **The three `ITerminalResolver` implementations split the same way `PathResolutionRepository`
+    does, but not uniformly** — it depends on whether the class has an injectable first-level
+    collaborator to mock at all. `ColumnTerminalResolver` has none (parameterless constructor — it
+    reads columns straight off the `IQueryable<KnowledgeNode>` it's handed), so there's no
+    collaborator to mock and no Components/ counterpart — but that's no longer a reason for
+    `TerminalResolvers/ColumnTerminalResolverTests.cs` itself to touch a real DB, now that
+    `MockQueryable` (see below) exists: it builds its `KnowledgeNode` fixtures directly
+    (`new KnowledgeNode { CanonicalName = "France" }`, no `DbFixtures`/`MockableAppDbContext`) and
+    wraps them in `.BuildMock()` to hand `ResolveAsync` a real async-capable `IQueryable<KnowledgeNode>`
+    with nothing behind it. **The `IQueryTransform` tests below are the one remaining spot in this
+    area that still touch a real DB, and for a different reason** — `AttributeQueryTransform`/etc.
+    join `source` against `_db.KnowledgeNodeAttribute` from their own injected `IAppDbContext`, not
+    just against the `IQueryable<KnowledgeNode>` they're handed, so it's not simply a matter of
+    wrapping one input list in `.BuildMock()` the way `ColumnTerminalResolver` was.
+    `AttributeTerminalResolver`/`MediaTerminalResolver` each take an
+    `IQueryTransform<KnowledgeNode, TDestination>` as their one constructor dependency, so **each
+    gets two test files, same dual-location pattern as `PathResolutionRepositoryTests` above**:
+    `Components/AttributeTerminalResolverTests.cs`/`Components/MediaTerminalResolverTests.cs`
+    construct a real `AttributeQueryTransform`/`MediaQueryTransform` against
+    `MockableAppDbContext` (the original tests, unchanged, just relocated — this is genuinely a
+    two-class subsystem test, not a unit test, since it exercises the transform's own join/filter
+    logic too), while `TerminalResolvers/AttributeTerminalResolverTests.cs`/
+    `TerminalResolvers/MediaTerminalResolverTests.cs` mock `IQueryTransform<...>` directly and
+    assert only the resolver's own dispatch logic (transform yields a row → success; yields nothing
+    → the generic failure; the resolver forwards its own `source`/`terminalName` params through to
+    `Transform` unchanged) — no DB, no `MockableAppDbContext`, at all. **`ResolveAsync` calls EF's
+    `.FirstOrDefaultAsync()` on whatever `Transform` returns, and that throws at runtime on a plain
+    `List<T>.AsQueryable()` (its provider isn't `IAsyncQueryProvider`)** — reaching for
+    `MockableAppDbContext` just to get something EF's async LINQ would accept was tried first and
+    rejected, since it pulls a real SQLite-backed queryable back into a test that's supposed to be
+    fully isolated from the DB. The **`MockQueryable.Moq`** NuGet package (added specifically for
+    this) solves it instead — `new[] { row }.BuildMock()` builds a fake `IQueryable<T>` backed by
+    an in-memory list that still implements `IAsyncQueryProvider`/`IAsyncEnumerable<T>`, so EF's
+    async LINQ operators work against it with no database anywhere behind it. Preferred over
+    hand-rolling the same thing (a `TestAsyncEnumerable<T>`/`TestAsyncQueryProvider<T>` pair was
+    tried first and dropped once this package was found) — it's a well-maintained, purpose-built
+    library for exactly this gap rather than bespoke reflection-based plumbing this repo would have
+    to maintain itself. Unlike the `PathResolutionRepository` unit tests, which don't need this at
+    all — mocking stops one level higher there, at `ITerminalResolver.ResolveAsync` itself (a plain
+    `Task`-returning method, not one returning an `IQueryable` that gets enumerated afterward).
+    `TerminalResolverFactory`, `Result<T>`/`Error`, and
+    `KnowledgeNodeMediaExtensions.ToJson()` have their own test files too — the latter two touch no
+    DB at all and are plain isolated unit tests; `TerminalResolverFactory`'s only dependency
+    (`IAppDbContext`) is used directly and untouched, so it's a genuine unit test despite using
+    `MockableAppDbContext`.
   - **System tests** (`MnemoToad.Knowledge.Tests/SystemTests/`) send real HTTP requests through the full app
     pipeline via `WebApplicationFactory<Program>` — see below.
 - `[SetUp]` creates a fresh mock/context/factory per test (not shared/static state), so tests can't
