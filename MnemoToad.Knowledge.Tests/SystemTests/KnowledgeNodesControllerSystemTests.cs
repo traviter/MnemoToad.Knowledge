@@ -229,6 +229,17 @@ public class KnowledgeNodesControllerSystemTests
     }
 
     [Test]
+    public async Task Create_WithNullAttributeValue_Returns400()
+    {
+        var nodeType = await _factory.Db.CreateNodeTypeAsync();
+        var json = "{\"nodeTypeId\":\"" + nodeType.Id + "\",\"canonicalName\":\"France\",\"attributes\":{\"population\":null}}";
+
+        var response = await _client.PostAsync("/nodes", new StringContent(json, Encoding.UTF8, "application/json"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
     public async Task Create_WithBlankCanonicalName_Returns400WithValidationErrors()
     {
         var nodeType = await _factory.Db.CreateNodeTypeAsync();

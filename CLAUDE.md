@@ -487,13 +487,15 @@
   bullet above; nothing about that changed).
   - `KnowledgeNode` (the same entity class returned directly by `KnowledgeNodesController`, per this
     project's no-separate-response-DTO convention) carries a real
-    `Dictionary<string, JsonValue?>? Attributes` property, excluded from the table mapping via
+    `Dictionary<string, JsonValue>? Attributes` property, excluded from the table mapping via
     `modelBuilder.Entity<KnowledgeNode>().Ignore(n => n.Attributes)` in `AppDbContext.OnModelCreating`
     — **the first `OnModelCreating`/Fluent API usage in this codebase** (see "Database" above: DB
     constraints still live purely in DbUp, this is pure ORM-side shaping, a different category — the
     same `OnModelCreating` also carries `KnowledgeNodeAttribute`'s composite-key config, since EF has
     no attribute-based way to declare a multi-property key). `KnowledgeNodeRequest` carries the
-    matching `Dictionary<string, JsonValue?>? Attributes = null`.
+    matching `Dictionary<string, JsonValue>? Attributes = null`. Only the dictionary itself is
+    nullable (no attributes at all) — the value type is non-nullable; see the `ScalarJsonValueConverter`
+    bullet below for why that wasn't always true.
   - **`Attributes` is nullable with no property-initializer default, and carries
     `[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]`** — this is a second, narrower
     instance of an entity carrying a `System.Text.Json` attribute for wire-shaping purposes (see the
@@ -514,21 +516,35 @@
     single-item response paths (`GetByIdAsync`, `CreateAsync`, `UpdateAsync`) always end up with a
     non-null (possibly empty) dictionary regardless of what the caller passed in — the repository
     doesn't lean on `KnowledgeNodesController`'s own `request.Attributes ?? new()` to guarantee this.
-  - `KnowledgeNodeAttribute.Value` is `JsonValue?` in C#, via an EF Core `HasConversion`/`ValueComparer`
-    pair (also in `OnModelCreating`, alongside `.HasColumnType("jsonb")`) that serializes to/from the
-    `jsonb` column — repository code never manually calls `JsonNode.Parse`/`.ToJsonString()`.
-    `System.Text.Json.Nodes.JsonValue` (the scalar-only subtype of `JsonNode` — no `JsonObject`/
-    `JsonArray`) was chosen deliberately: **arrays and nested objects aren't supported attribute
-    values, and the type itself is the validation** rather than a custom `ValidationAttribute`. A
-    default `JsonValueConverter` throws `InvalidOperationException` (not `JsonException`) for an
-    object/array token, which `SystemTextJsonInputFormatter` doesn't translate into a 400 — so
+  - `KnowledgeNodeAttribute.Value` is non-nullable `JsonValue` in C#, via an EF Core
+    `HasConversion`/`ValueComparer` pair (also in `OnModelCreating`, alongside
+    `.HasColumnType("jsonb")`) that serializes to/from the `jsonb` column — repository code never
+    manually calls `JsonNode.Parse`/`.ToJsonString()`. `System.Text.Json.Nodes.JsonValue` (the
+    scalar-only subtype of `JsonNode` — no `JsonObject`/`JsonArray`) was chosen deliberately:
+    **arrays, nested objects, and JSON `null` aren't supported attribute values, and the type itself
+    is the validation** rather than a custom `ValidationAttribute`. A default `JsonValueConverter`
+    throws `InvalidOperationException` (not `JsonException`) for an object/array token, which
+    `SystemTextJsonInputFormatter` doesn't translate into a 400 — so
     `MnemoToad.Knowledge.Api/Json/ScalarJsonValueConverter.cs` is registered via
     `AddJsonOptions` in `ServiceCollectionExtensions.cs` specifically to rethrow as `JsonException`,
-    keeping a bad attribute value a normal 400 instead of a 500. `.HasColumnType("jsonb")` is
-    Postgres-specific syntax, but harmless under the SQLite test provider too — SQLite has no native
-    `jsonb` type and falls back to NUMERIC column affinity for the unrecognized type name, which still
-    round-trips the converted JSON text correctly (confirmed by the repository/system test suite,
-    including numeric-looking values like population counts).
+    keeping a bad attribute value a normal 400 instead of a 500. **`null` is rejected the same
+    way now, not accepted — this reverses an earlier version of the converter that explicitly
+    allowed it** (`Value`/`Attributes`/`KnowledgeNodeRequest.Attributes` were all `JsonValue?`
+    end to end). That was never a deliberate design choice so much as an unexamined default:
+    `System.Text.Json.Nodes.JsonValue` has no dedicated "JSON null" node type — a C# `null`
+    reference *is* how this API represents the JSON value `null`, so a nullable `JsonValue?` was
+    the only way to let one through at all, and nobody had asked whether that should actually be
+    legal. It shouldn't have been — the DB's own `value JSONB NOT NULL` constraint (present in
+    script `010` since it was first written) already disagreed: before this fix, a client-submitted
+    null attribute value passed the app layer's validation, then failed as an *uncaught* `NOT NULL`
+    violation (a raw 500, no catch clause for it in `SaveChangesAsync()`), never a clean 400 — the
+    contradiction between "the converter accepts this" and "the DB already rejects it" is what
+    surfaced the bug. No DbUp script changed to fix it; the constraint was already correct, only the
+    app layer was catching up to it. `.HasColumnType("jsonb")` is Postgres-specific syntax, but
+    harmless under the SQLite test provider too — SQLite has no native `jsonb` type and falls back
+    to NUMERIC column affinity for the unrecognized type name, which still round-trips the converted
+    JSON text correctly (confirmed by the repository/system test suite, including numeric-looking
+    values like population counts).
   - `KnowledgeNodeRepository.CreateAsync`/`UpdateAsync` orchestrate the node and its attribute rows as
     one unit, reading/writing `KnowledgeNodeAttribute` directly through the same `IAppDbContext` it
     already depended on (no new repository-to-repository dependency, no reintroduced service layer).
@@ -593,9 +609,16 @@
     explicitly by the user, not an oversight. Plain (not `DEFERRABLE`) — media is never expected to
     move between rows within one update, so the extra complexity a deferred constraint would need
     isn't warranted.
-  - **`KnowledgeNode.Media` is `Dictionary<string, JsonObject?>?`, mapped to `knowledge_node_media.metadata`
-    (`jsonb`) — the single canonical shape for a media entry, in both directions, exactly mirroring
-    how `KnowledgeNodeAttribute.Value` (`JsonValue?`) drives `Attributes`.** `KnowledgeNodeRequest.Media`
+  - **`KnowledgeNode.Media` is `Dictionary<string, JsonObject>?`, mapped to `knowledge_node_media.metadata`
+    (`jsonb`) — the single canonical shape for a media entry, in both directions, mirroring how
+    `KnowledgeNodeAttribute.Value` (`JsonValue`) drives `Attributes`: only the dictionary itself is
+    nullable (no media at all), never the value at a present key. `Media` didn't start this way —
+    it was originally `Dictionary<string, JsonObject?>?`, copied from `Attributes`' shape without
+    checking whether the same nullability reasoning actually applied to it. It doesn't: a media
+    stanza can never legitimately be absent once its key exists (`ExtractMediaFields` already
+    guarantees `id`/`alt_text` at write time, unlike an attribute's value, which — before the fix
+    described in the `KnowledgeNodeAttribute.Value` bullet above — genuinely could be JSON `null`.**
+    `KnowledgeNodeRequest.Media`
     is the *same type*, so `KnowledgeNodesController.Create`/`Update` just do
     `Media = request.Media ?? new()` — no shell-object translation, no second repository parameter.
     (An earlier version tried both of those approaches in turn, when `Media`'s read shape — a full
@@ -614,8 +637,12 @@
     pulls `id` (required — parsed as a `Guid`) and `alt_text` (required — "Accessibility is a
     requirement," validated identically to `id`, not treated as optional) out into their own real
     `media_asset_id`/`alt_text` columns for future querying, but `Metadata` is assigned the whole
-    incoming `JsonObject` as-is, redundancy and all — a `GET` response for that key is just
-    `metadata` read back, not reconstructed from the two extracted columns. A missing or
+    incoming `JsonObject` as-is, redundancy and all — a `GET` response for that key is `metadata`
+    read back with `id`/`alt_text` re-overridden from the two extracted columns
+    (`KnowledgeNodeMediaExtensions.ToJson()`, in `MnemoToad.Knowledge.Data/Entities/`, shared with
+    the Path Resolution media terminal — see below) rather than reconstructed purely from them. A
+    no-op in practice, since both are already in sync at write time, but a guardrail against them
+    ever silently drifting. A missing or
     wrong-typed `id`/`alt_text` throws `ValidationException` (`"The media entry '{key}' must include
     a valid 'id'."` / `"...'alt_text'."`), caught by the controller's existing
     `ValidationException → 400` pattern, same as every other repository-level validation failure —
@@ -674,6 +701,72 @@
     version had a real FK from `knowledge_node_media.media_asset_id` to `media_asset(id)`, translated
     to a 400 on violation — also removed (see the no-FK bullet above). None of that machinery exists
     anymore; `Metadata`/`JsonObject` is the whole story now.
+- **Path Resolution (`POST /nodes/resolve`)** resolves a batch of Property Path DSL expressions
+  against `KnowledgeNode`s in one call — e.g. `>capital>capitalOf_canonicalName` walks two edges
+  then reads a column, `.population` reads an attribute directly off the starting node, `#flag`
+  reads a media entry. Grammar: zero or more `>edgeName` hops, then exactly one terminal marker —
+  `_columnName` (a `KnowledgeNode` column), `.attributeName`, or `#mediaKey`.
+  - **Everything lives under `MnemoToad.Knowledge.Data/`, split into four sibling
+    namespaces/folders** (deliberately not nested inside each other, even where one is
+    conceptually "for" another): `PathResolution/` (the DSL model only — `PathExpression`,
+    `PathExpressionParser`/`IPathExpressionParser`, `PathResolutionQuery`, `ResolvedPath`),
+    `TerminalResolvers/` (`ITerminalResolver` + `ColumnTerminalResolver`/`AttributeTerminalResolver`/
+    `MediaTerminalResolver` + `ITerminalResolverFactory`/`TerminalResolverFactory`),
+    `QueryTransforms/` (`IQueryTransform<TSource, TDestination>` + `NodeRelationshipQueryTransform`/
+    `AttributeQueryTransform`/`MediaQueryTransform` — no `ColumnQueryTransform`; it was a pure
+    identity no-op once spotted and was removed rather than kept for uniformity), and `Common/`
+    (`Result<T>`/`Error` — see below). `Repositories/PathResolutionRepository.cs` is the only piece
+    that stays in `Repositories/`, since it's the one actually registered as `IPathResolutionRepository`.
+  - **One DB round trip per path, not one per edge.** `PathResolutionRepository.TraversePathToNode`
+    builds a single composed `IQueryable<KnowledgeNode>` by seeding from the starting node and
+    folding `IQueryTransform<KnowledgeNode, KnowledgeNode>.Transform` over each edge name in turn —
+    nothing executes until the terminal resolver finally awaits it, so an N-edge path is one SQL
+    statement with N join pairs, not N+1 round trips (an earlier version genuinely did one query
+    per hop plus a separate up-front existence check). `NodeRelationshipQueryTransform` (in
+    `QueryTransforms/`) is what one edge actually does: join `KnowledgeRelation` → `RelationshipType`
+    filtered by name → back to `KnowledgeNode`.
+  - **Edges only match forward, via `RelationshipType.Name`.** Matching an edge against
+    `RelationshipType.InverseName` (reverse traversal) existed briefly as an implicit same-token
+    fallback and was removed deliberately, not lost by accident — it was never actually meant to
+    work that way. Reverse traversal may come back later, but behind its own explicit grammar
+    token, not a silent fallback on the forward one.
+  - **Every DB-driven failure — missing node, an edge with no matching relation, a missing terminal
+    attribute/media key — returns the same generic `"Path could not be resolved."` message,
+    deliberately not distinguishing which stage failed.** That's what let the whole per-hop lookup
+    collapse into one query in the first place: a failed join anywhere in the chain just makes the
+    composed query return no rows, with nothing left to inspect to say which join it was. DSL
+    syntax errors and an unknown column name still get their own specific messages — both are
+    caught in memory, before any query runs.
+  - **`ITerminalResolverFactory`/`TerminalResolverFactory` is the only piece the API project
+    registers or references** — `ServiceCollectionExtensions.cs` has exactly one
+    `AddScoped<ITerminalResolverFactory, TerminalResolverFactory>()` line, nothing for
+    `ITerminalResolver`, `ColumnTerminalResolver`, `AttributeTerminalResolver`, or
+    `MediaTerminalResolver` anywhere in the API project. `TerminalResolverFactory` builds all three
+    resolvers itself, directly, from the scoped `IAppDbContext` it's constructed with (no
+    `IServiceProvider` service-locator call), keyed by `PathTerminalKind`; `GetResolver` throws
+    `InvalidOperationException` rather than returning null for an unregistered kind, since that
+    state should be unreachable given the enum is closed and every value is wired up. Same pattern
+    for edge traversal: `PathResolutionRepository` constructs its own
+    `NodeRelationshipQueryTransform` internally rather than taking it as a registered dependency.
+  - **`Result<T>`/`Error`** (`MnemoToad.Knowledge.Data/Common/`) is a small closed discriminated
+    union — `Result<T>.Success(T Value)` / `Result<T>.Failure(string Message)`, base constructor
+    `private` so only those two nested records can ever exist — used as
+    `ITerminalResolver.ResolveAsync`'s return type instead of a `(JsonNode? Value, string? Error)`
+    tuple. Implicit operators (`Result<T>(T value)`, `Result<T>(Error error)`) let a resolver just
+    `return someValue;` or `return new Error("message");`. `Error` is a dedicated wrapper rather
+    than a bare `string` specifically so the two operators can't collide — `implicit operator
+    Result<T>(string)` would become byte-for-byte identical to `implicit operator Result<T>(T
+    value)` the instant someone instantiates `Result<string>`, which is a compile error (duplicate
+    operator), not just a runtime ambiguity. Deliberately general-purpose, not
+    Path-Resolution-specific — meant to be reused once `MnemoToad.Learning` needs the same
+    success/failure pattern, currently still living in this repo rather than a shared library since
+    that split hasn't happened yet.
+  - **A media terminal (`#key`) returns the stored stanza flat** — `id`/`alt_text` overridden onto
+    a clone of `Metadata`, not nested under a separate `metadata` key the way an earlier version
+    did. `KnowledgeNodeMediaExtensions.ToJson()` (`MnemoToad.Knowledge.Data/Entities/`) is the one
+    implementation, shared with `KnowledgeNodeRepository.GetMediaAsync` (see the `MediaAsset`/
+    `KnowledgeNodeMedia` bullet above for why that one clones too, even though its own override is
+    a no-op today).
 
 ## API documentation (Swagger)
 - `<GenerateDocumentationFile>`/`<NoWarn>1591</NoWarn>` are set in both `MnemoToad.Knowledge.Api.csproj`

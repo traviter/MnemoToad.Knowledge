@@ -9,8 +9,8 @@ namespace MnemoToad.Knowledge.Api.Contracts;
 /// <param name="Description">Free-text description of the node.</param>
 /// <param name="Attributes">
 /// Scalar key/value facts about the node (e.g. <c>{ "isoCode": "FR", "population": 68000000 }</c>).
-/// Values must be scalars — arrays and nested objects aren't supported. On update this is a full
-/// replace: an omitted key is removed from the node.
+/// Values must be a string, number, or boolean — null, arrays, and nested objects aren't
+/// supported. On update this is a full replace: an omitted key is removed from the node.
 /// </param>
 /// <param name="Media">
 /// Media links keyed by name (e.g. <c>"flag"</c>). Each entry must include a valid <c>id</c> (an
@@ -21,5 +21,5 @@ public record KnowledgeNodeRequest(
     [Required] Guid? NodeTypeId,
     [Required] string CanonicalName,
     string? Description,
-    Dictionary<string, JsonValue?>? Attributes = null,
+    Dictionary<string, JsonValue>? Attributes = null,
     Dictionary<string, JsonObject>? Media = null);

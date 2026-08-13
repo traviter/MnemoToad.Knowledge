@@ -26,7 +26,7 @@ public class KnowledgeNode
     /// only present when fetching a single node.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Dictionary<string, JsonValue?>? Attributes { get; set; }
+    public Dictionary<string, JsonValue>? Attributes { get; set; }
 
     /// <summary>
     /// Media links keyed by name (e.g. <c>"flag"</c>). Omitted entirely (not just empty) on list

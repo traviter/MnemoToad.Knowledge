@@ -84,6 +84,13 @@ Feature: KnowledgeNode API
     When method post
     Then status 400
 
+  Scenario: Reject creation with a null-valued attribute
+    * def nodeType = createNodeType()
+    Given path 'nodes'
+    And request { nodeTypeId: '#(nodeType.response.id)', canonicalName: '#(uniqueName("KnowledgeNode"))', attributes: { population: null } }
+    When method post
+    Then status 400
+
   Scenario: Reject creation with a non-alpha attribute key
     * def nodeType = createNodeType()
     Given path 'nodes'

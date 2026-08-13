@@ -20,10 +20,10 @@ public class AppDbContext : DbContext, IAppDbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        var jsonValueComparer = new ValueComparer<JsonValue?>(
-            (a, b) => (a == null && b == null) || (a != null && b != null && a.ToJsonString() == b.ToJsonString()),
-            v => v == null ? 0 : v.ToJsonString().GetHashCode(),
-            v => v == null ? null : JsonNode.Parse(v.ToJsonString())!.AsValue());
+        var jsonValueComparer = new ValueComparer<JsonValue>(
+            (a, b) => a.ToJsonString() == b.ToJsonString(),
+            v => v.ToJsonString().GetHashCode(),
+            v => JsonNode.Parse(v.ToJsonString())!.AsValue());
 
         modelBuilder.Entity<KnowledgeNodeAttribute>().HasKey(a => new { a.KnowledgeNodeId, a.Key });
 
@@ -31,8 +31,8 @@ public class AppDbContext : DbContext, IAppDbContext
             .Property(a => a.Value)
             .HasColumnType("jsonb")
             .HasConversion(
-                v => v == null ? null : v.ToJsonString(),
-                v => v == null ? null : JsonNode.Parse(v)!.AsValue())
+                v => v.ToJsonString(),
+                v => JsonNode.Parse(v)!.AsValue())
             .Metadata.SetValueComparer(jsonValueComparer);
 
         modelBuilder.Entity<KnowledgeNode>().Ignore(n => n.Attributes);
