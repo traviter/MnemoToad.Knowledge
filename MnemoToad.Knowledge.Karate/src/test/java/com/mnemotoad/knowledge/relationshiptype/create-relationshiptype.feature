@@ -7,9 +7,8 @@ Feature: Create a RelationshipType (reusable setup helper)
   Scenario:
     * def uniqueAlphaName = read('classpath:com/mnemotoad/knowledge/common/uniqueAlphaName.js')
     * def name = karate.get('name') ? karate.get('name') : uniqueAlphaName('RelationshipType')
-    * def inverseName = karate.get('inverseName')
     * def description = karate.get('description')
     Given path 'relationshipTypes'
-    And request { name: '#(name)', inverseName: '#(inverseName)', description: '#(description)' }
+    And request { name: '#(name)', description: '#(description)' }
     When method post
     Then status 201

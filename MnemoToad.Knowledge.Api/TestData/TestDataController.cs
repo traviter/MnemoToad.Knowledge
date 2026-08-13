@@ -38,7 +38,7 @@ public class TestDataController : ControllerBase
         foreach (var x in request.NodeTypes ?? new())
             await _nodeTypes.CreateAsync(new NodeType { Id = x.Id, Name = x.Name, Description = x.Description });
         foreach (var x in request.RelationshipTypes ?? new())
-            await _relationshipTypes.CreateAsync(new RelationshipType { Id = x.Id, Name = x.Name, InverseName = x.InverseName, Description = x.Description });
+            await _relationshipTypes.CreateAsync(new RelationshipType { Id = x.Id, Name = x.Name, Description = x.Description });
         foreach (var x in request.MediaAssets ?? new())
             await _mediaAssets.CreateAsync(new MediaAsset { Id = x.Id, Url = x.Url });
         foreach (var x in request.KnowledgeNodes ?? new())

@@ -11,7 +11,7 @@ public record SeedTestDataRequest(
 
 public record TestNodeType(Guid Id, string Name, string? Description = null);
 
-public record TestRelationshipType(Guid Id, string Name, string? InverseName = null, string? Description = null);
+public record TestRelationshipType(Guid Id, string Name, string? Description = null);
 
 public record TestMediaAsset(Guid Id, string Url);
 

@@ -61,11 +61,11 @@ public class RelationshipTypesControllerTests
     [Test]
     public async Task Create_WithValidRequest_ReturnsCreatedWithRelationshipType()
     {
-        var created = new RelationshipType { Id = Guid.NewGuid(), Name = "parentOf", InverseName = "childOf" };
-        _repository.Setup(r => r.CreateAsync(It.Is<RelationshipType>(r => r.Name == "parentOf" && r.InverseName == "childOf")))
+        var created = new RelationshipType { Id = Guid.NewGuid(), Name = "parentOf" };
+        _repository.Setup(r => r.CreateAsync(It.Is<RelationshipType>(r => r.Name == "parentOf")))
             .ReturnsAsync(created);
 
-        var result = await _controller.Create(new RelationshipTypeRequest("parentOf", "childOf", null));
+        var result = await _controller.Create(new RelationshipTypeRequest("parentOf", null));
 
         var createdResult = result as CreatedResult;
         Assert.That(createdResult, Is.Not.Null);
@@ -79,7 +79,7 @@ public class RelationshipTypesControllerTests
         _repository.Setup(r => r.CreateAsync(It.IsAny<RelationshipType>()))
             .ThrowsAsync(new ValidationException("A RelationshipType with that name already exists."));
 
-        Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new RelationshipTypeRequest("parentOf", null, null)));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Create(new RelationshipTypeRequest("parentOf", null)));
     }
 
     [Test]
@@ -89,7 +89,7 @@ public class RelationshipTypesControllerTests
         var updated = new RelationshipType { Id = id, Name = "parentOf", Description = "New description" };
         _repository.Setup(r => r.UpdateAsync(It.Is<RelationshipType>(r => r.Id == id))).ReturnsAsync(updated);
 
-        var result = await _controller.Update(id, new RelationshipTypeRequest("parentOf", null, "New description"));
+        var result = await _controller.Update(id, new RelationshipTypeRequest("parentOf", "New description"));
 
         var ok = result as OkObjectResult;
         Assert.That(ok, Is.Not.Null);
@@ -101,7 +101,7 @@ public class RelationshipTypesControllerTests
     {
         _repository.Setup(r => r.UpdateAsync(It.IsAny<RelationshipType>())).ReturnsAsync((RelationshipType?)null);
 
-        var result = await _controller.Update(Guid.NewGuid(), new RelationshipTypeRequest("parentOf", null, null));
+        var result = await _controller.Update(Guid.NewGuid(), new RelationshipTypeRequest("parentOf", null));
 
         Assert.That(result, Is.InstanceOf<NotFoundResult>());
     }
@@ -112,7 +112,7 @@ public class RelationshipTypesControllerTests
         _repository.Setup(r => r.UpdateAsync(It.IsAny<RelationshipType>()))
             .ThrowsAsync(new ValidationException("A RelationshipType with that name already exists."));
 
-        Assert.ThrowsAsync<ValidationException>(() => _controller.Update(Guid.NewGuid(), new RelationshipTypeRequest("parentOf", null, null)));
+        Assert.ThrowsAsync<ValidationException>(() => _controller.Update(Guid.NewGuid(), new RelationshipTypeRequest("parentOf", null)));
     }
 
     [Test]

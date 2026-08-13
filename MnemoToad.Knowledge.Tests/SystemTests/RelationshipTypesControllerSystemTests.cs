@@ -40,7 +40,7 @@ public class RelationshipTypesControllerSystemTests
     [Test]
     public async Task Create_ThenGetById_RoundTripsThroughTheRealStack()
     {
-        var createResponse = await _client.PostAsJsonAsync("/relationshipTypes", new RelationshipTypeRequest("parentOf", "childOf", "A parent-child relation"));
+        var createResponse = await _client.PostAsJsonAsync("/relationshipTypes", new RelationshipTypeRequest("parentOf", "A parent-child relation"));
         var created = await createResponse.Content.ReadFromJsonAsync<RelationshipType>();
 
         var getResponse = await _client.GetAsync($"/relationshipTypes/{created!.Id}");
@@ -53,7 +53,7 @@ public class RelationshipTypesControllerSystemTests
     [Test]
     public async Task Create_WithBlankName_Returns400WithValidationErrors()
     {
-        var response = await _client.PostAsJsonAsync("/relationshipTypes", new RelationshipTypeRequest("", null, null));
+        var response = await _client.PostAsJsonAsync("/relationshipTypes", new RelationshipTypeRequest("", null));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
@@ -65,7 +65,7 @@ public class RelationshipTypesControllerSystemTests
     {
         _factory.Db.ThrowOnSaveChanges(PostgresExceptionFactory.UniqueViolation());
 
-        var response = await _client.PostAsJsonAsync("/relationshipTypes", new RelationshipTypeRequest("parentOf", null, null));
+        var response = await _client.PostAsJsonAsync("/relationshipTypes", new RelationshipTypeRequest("parentOf", null));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
@@ -75,7 +75,7 @@ public class RelationshipTypesControllerSystemTests
     [Test]
     public async Task Update_WhenNotFound_Returns404()
     {
-        var response = await _client.PutAsJsonAsync($"/relationshipTypes/{Guid.NewGuid()}", new RelationshipTypeRequest("parentOf", null, null));
+        var response = await _client.PutAsJsonAsync($"/relationshipTypes/{Guid.NewGuid()}", new RelationshipTypeRequest("parentOf", null));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
@@ -86,7 +86,7 @@ public class RelationshipTypesControllerSystemTests
         var relationshipType = await _factory.Db.CreateRelationshipTypeAsync("parentOf");
         _factory.Db.ThrowOnSaveChanges(PostgresExceptionFactory.UniqueViolation());
 
-        var response = await _client.PutAsJsonAsync($"/relationshipTypes/{relationshipType.Id}", new RelationshipTypeRequest("hasCapital", null, null));
+        var response = await _client.PutAsJsonAsync($"/relationshipTypes/{relationshipType.Id}", new RelationshipTypeRequest("hasCapital", null));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }

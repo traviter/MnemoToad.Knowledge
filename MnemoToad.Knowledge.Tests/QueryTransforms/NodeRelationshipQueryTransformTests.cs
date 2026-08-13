@@ -52,18 +52,4 @@ public class NodeRelationshipQueryTransformTests
 
         Assert.That(result, Is.Empty);
     }
-
-    [Test]
-    public async Task Transform_InverseNameIsNotMatched_ReturnsEmpty()
-    {
-        var nodeType = await _db.CreateNodeTypeAsync();
-        var source = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var target = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        var relationshipType = await _db.CreateRelationshipTypeAsync(name: "capital", inverseName: "capitalOf");
-        await _db.CreateKnowledgeRelationAsync(source.Id, relationshipType.Id, target.Id);
-
-        var result = await _transform.Transform(Source(target.Id), "capitalOf").ToListAsync();
-
-        Assert.That(result, Is.Empty);
-    }
 }

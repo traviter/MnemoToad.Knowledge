@@ -86,13 +86,11 @@ public class RelationshipTypeRepositoryTests
         {
             Id = relationshipType.Id,
             Name = "parentOf",
-            InverseName = "childOf",
             Description = "New description"
         });
 
         Assert.That(updated, Is.Not.Null);
-        Assert.That(updated!.InverseName, Is.EqualTo("childOf"));
-        Assert.That(updated.Description, Is.EqualTo("New description"));
+        Assert.That(updated!.Description, Is.EqualTo("New description"));
     }
 
     [Test]
@@ -149,16 +147,5 @@ public class RelationshipTypeRepositoryTests
             () => _repository.CreateAsync(new RelationshipType { Id = Guid.NewGuid(), Name = "hasCapital1" }));
 
         Assert.That(ex!.Message, Is.EqualTo("The RelationshipType Name must contain only letters."));
-    }
-
-    [Test]
-    public void CreateAsync_OnInverseNameCheckViolation_ThrowsValidationExceptionAboutLettersOnly()
-    {
-        _db.ThrowOnSaveChanges(PostgresExceptionFactory.CheckViolation(constraintName: "ck_relationship_type_inverse_name"));
-
-        var ex = Assert.ThrowsAsync<ValidationException>(
-            () => _repository.CreateAsync(new RelationshipType { Id = Guid.NewGuid(), Name = "hasCapital", InverseName = "capital_of" }));
-
-        Assert.That(ex!.Message, Is.EqualTo("The RelationshipType InverseName must contain only letters."));
     }
 }

@@ -726,11 +726,14 @@
     per hop plus a separate up-front existence check). `NodeRelationshipQueryTransform` (in
     `QueryTransforms/`) is what one edge actually does: join `KnowledgeRelation` → `RelationshipType`
     filtered by name → back to `KnowledgeNode`.
-  - **Edges only match forward, via `RelationshipType.Name`.** Matching an edge against
-    `RelationshipType.InverseName` (reverse traversal) existed briefly as an implicit same-token
-    fallback and was removed deliberately, not lost by accident — it was never actually meant to
-    work that way. Reverse traversal may come back later, but behind its own explicit grammar
-    token, not a silent fallback on the forward one.
+  - **Edges only match forward, via `RelationshipType.Name`.** A separate `InverseName` column
+    existed briefly (matching an edge against it was an implicit same-token fallback for reverse
+    traversal) and was removed deliberately, not lost by accident — it was never actually meant to
+    work that way, and the column itself was dropped from `relationship_type` (scripts `008`/`013`
+    edited in place, not appended to — both were still local-only at the time). Reverse traversal
+    is planned for a future iteration, reusing the same `Name` column (traversing a matched edge
+    backward) rather than a second name column, behind its own explicit grammar token, not a silent
+    fallback on the forward one.
   - **Every DB-driven failure — missing node, an edge with no matching relation, a missing terminal
     attribute/media key — returns the same generic `"Path could not be resolved."` message,
     deliberately not distinguishing which stage failed.** That's what let the whole per-hop lookup

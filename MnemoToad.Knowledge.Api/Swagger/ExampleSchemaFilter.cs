@@ -28,14 +28,12 @@ public class ExampleSchemaFilter : ISchemaFilter
         [typeof(RelationshipTypeRequest)] = () => new JsonObject
         {
             ["name"] = "capitalOf",
-            ["inverseName"] = "hasCapital",
             ["description"] = "Links a capital city to the country it governs.",
         },
         [typeof(RelationshipType)] = () => new JsonObject
         {
             ["id"] = "6c9b2f2e-2a3d-4e33-9b0a-2f1a6d4c8e10",
             ["name"] = "capitalOf",
-            ["inverseName"] = "hasCapital",
             ["description"] = "Links a capital city to the country it governs.",
         },
         [typeof(KnowledgeNodeRequest)] = () => new JsonObject

@@ -187,7 +187,7 @@ public class PathResolutionRepositoryTests
         var nodeType = await _db.CreateNodeTypeAsync();
         var source = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
         var target = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "Paris");
-        var relationshipType = await _db.CreateRelationshipTypeAsync(name: "capital", inverseName: "capitalOf");
+        var relationshipType = await _db.CreateRelationshipTypeAsync(name: "capital");
         await _db.CreateKnowledgeRelationAsync(source.Id, relationshipType.Id, target.Id);
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(source.Id, ">capital_canonicalName"));

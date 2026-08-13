@@ -27,12 +27,11 @@ internal static class DbFixtures
         return knowledgeNode;
     }
 
-    public static async Task<RelationshipType> CreateRelationshipTypeAsync(this IAppDbContext db, string? name = null, string? inverseName = null, string? description = null)
+    public static async Task<RelationshipType> CreateRelationshipTypeAsync(this IAppDbContext db, string? name = null, string? description = null)
     {
         var relationshipType = new RelationshipType
         {
             Name = name ?? $"RelationshipType_{Guid.NewGuid()}",
-            InverseName = inverseName,
             Description = description
         };
         db.RelationshipType.Add(relationshipType);

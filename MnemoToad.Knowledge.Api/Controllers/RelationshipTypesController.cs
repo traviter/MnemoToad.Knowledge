@@ -7,7 +7,7 @@ namespace MnemoToad.Knowledge.Api.Controllers;
 
 /// <summary>
 /// A RelationshipType is the open vocabulary that KnowledgeRelations are classified under
-/// (e.g. "capitalOf", inverse "hasCapital").
+/// (e.g. "capitalOf").
 /// </summary>
 [ApiController]
 [Route("relationshipTypes")]
@@ -38,7 +38,7 @@ public class RelationshipTypesController : ControllerBase
         await _repository.GetByIdAsync(id) is { } relationshipType ? Ok(relationshipType) : NotFound();
 
     /// <summary>Creates a new RelationshipType.</summary>
-    /// <param name="request">The name, optional inverse name, and optional description for the new RelationshipType.</param>
+    /// <param name="request">The name and optional description for the new RelationshipType.</param>
     /// <response code="201">The created RelationshipType.</response>
     /// <response code="400">
     /// <c>Name</c> was missing, or a RelationshipType with that name already exists.
@@ -51,15 +51,14 @@ public class RelationshipTypesController : ControllerBase
         var created = await _repository.CreateAsync(new RelationshipType
         {
             Name = request.Name,
-            InverseName = request.InverseName,
             Description = request.Description
         });
         return Created($"/relationshipTypes/{created.Id}", created);
     }
 
-    /// <summary>Replaces an existing RelationshipType's name, inverse name, and description.</summary>
+    /// <summary>Replaces an existing RelationshipType's name and description.</summary>
     /// <param name="id">The RelationshipType's id.</param>
-    /// <param name="request">The RelationshipType's new name, optional inverse name, and optional description.</param>
+    /// <param name="request">The RelationshipType's new name and optional description.</param>
     /// <response code="200">The updated RelationshipType.</response>
     /// <response code="400">
     /// <c>Name</c> was missing, or another RelationshipType already has that name.
@@ -75,7 +74,6 @@ public class RelationshipTypesController : ControllerBase
         {
             Id = id,
             Name = request.Name,
-            InverseName = request.InverseName,
             Description = request.Description
         });
         return updated is not null ? Ok(updated) : NotFound();

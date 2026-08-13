@@ -27,13 +27,11 @@ Feature: RelationshipType API
 
   Scenario: Create a relationship type successfully
     * def name = uniqueAlphaName('RelationshipType')
-    * def inverseName = 'inverseOf' + name
     Given path 'relationshipTypes'
-    And request { name: '#(name)', inverseName: '#(inverseName)', description: 'Created by Karate test' }
+    And request { name: '#(name)', description: 'Created by Karate test' }
     When method post
     Then status 201
     And match response.name == name
-    And match response.inverseName == inverseName
     And match response.description == 'Created by Karate test'
     And match response.id == '#uuid'
     * eval relationshipTypeFixtures.stageForCleanup(response.id)
@@ -59,13 +57,6 @@ Feature: RelationshipType API
     When method post
     Then status 400
 
-  Scenario: Reject creation with a non-alpha inverseName
-    * def name = uniqueAlphaName('RelationshipType')
-    Given path 'relationshipTypes'
-    And request { name: '#(name)', inverseName: 'capital_of' }
-    When method post
-    Then status 400
-
   Scenario: Get a relationship type by id
     * def created = createRelationshipType()
 
@@ -87,13 +78,11 @@ Feature: RelationshipType API
     * def created = createRelationshipType()
 
     * def updatedName = created.response.name + 'Updated'
-    * def updatedInverseName = 'inverseOf' + updatedName
     Given path 'relationshipTypes', created.response.id
-    And request { name: '#(updatedName)', inverseName: '#(updatedInverseName)', description: 'Updated by test' }
+    And request { name: '#(updatedName)', description: 'Updated by test' }
     When method put
     Then status 200
     And match response.name == updatedName
-    And match response.inverseName == updatedInverseName
     And match response.description == 'Updated by test'
 
   Scenario: Reject update with a duplicate name
