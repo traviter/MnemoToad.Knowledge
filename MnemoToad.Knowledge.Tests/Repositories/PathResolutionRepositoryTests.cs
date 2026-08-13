@@ -1,11 +1,12 @@
 using Moq;
+using MockQueryable.Moq;
+using MnemoToad.Knowledge.Data;
 using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.Repositories;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
-using MnemoToad.Knowledge.Tests.TestSupport;
 using NUnit.Framework;
 using System.Text.Json.Nodes;
 
@@ -14,7 +15,7 @@ namespace MnemoToad.Knowledge.Tests.Repositories;
 [TestFixture]
 public class PathResolutionRepositoryTests
 {
-    private MockableAppDbContext _db = null!;
+    private Mock<IAppDbContext> _db = null!;
     private Mock<IPathExpressionParser> _parser = null!;
     private Mock<ITerminalResolverFactory> _terminalResolverFactory = null!;
     private Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>> _edgeQueryTransform = null!;
@@ -24,7 +25,8 @@ public class PathResolutionRepositoryTests
     [SetUp]
     public void SetUp()
     {
-        _db = new MockableAppDbContext();
+        _db = new Mock<IAppDbContext>();
+        _db.Setup(d => d.KnowledgeNode).Returns(new List<KnowledgeNode>().BuildMockDbSet().Object);
         _parser = new Mock<IPathExpressionParser>();
         _terminalResolverFactory = new Mock<ITerminalResolverFactory>();
         _edgeQueryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>>();
@@ -32,11 +34,8 @@ public class PathResolutionRepositoryTests
             .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()))
             .Returns((IQueryable<KnowledgeNode> source, string _) => source);
         _resolver = new Mock<ITerminalResolver>();
-        _repository = new PathResolutionRepository(_db, _parser.Object, _terminalResolverFactory.Object, _edgeQueryTransform.Object);
+        _repository = new PathResolutionRepository(_db.Object, _parser.Object, _terminalResolverFactory.Object, _edgeQueryTransform.Object);
     }
-
-    [TearDown]
-    public void TearDown() => _db.Dispose();
 
     private void SetupParse(string path, PathExpression? expression) =>
         _parser.Setup(p => p.TryParse(path, out expression)).Returns(true);

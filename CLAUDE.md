@@ -825,26 +825,36 @@
     purely so `ExecuteDelete`/`ExecuteUpdate` don't throw on the happy path.
   - **Component tests** (`MnemoToad.Knowledge.Tests/Components/`) — new layer, currently just
     `PathResolutionRepositoryTests`, moved here from `Repositories/` once `PathResolutionRepository`
-    stopped being testable in isolation the way the other five repositories are. It now collaborates
-    with a real `TerminalResolverFactory`, which itself builds real `ColumnTerminalResolver`/
-    `AttributeTerminalResolver`/`MediaTerminalResolver` and a real `NodeRelationshipQueryTransform` —
-    exercising `PathResolutionRepository.ResolveAsync` through the SQLite in-memory database (same
-    `MockableAppDbContext` as the repository layer, still no HTTP) now exercises that whole
-    subsystem, not one class with its dependencies mocked out. `IPathExpressionParser` is still
-    mocked (parsing itself is a pure function, already covered by its own
-    `PathExpressionParserTests`, and isn't worth constructing real DSL strings for on every case).
-    **`Repositories/PathResolutionRepositoryTests.cs` is a separate, second test file covering the
-    same class** — where the Components version exercises the real subsystem end-to-end, the
-    Repositories version mocks all four of `PathResolutionRepository`'s constructor dependencies
-    (`IPathExpressionParser`, `ITerminalResolverFactory`, `ITerminalResolver`, and
-    `IQueryTransform<KnowledgeNode, KnowledgeNode>`) and asserts pure dispatch/composition logic —
+    stopped being testable in isolation the way the other five repositories are. **Nothing is mocked
+    except the DB** — a real `PathExpressionParser`, a real `TerminalResolverFactory` (which itself
+    builds real `ColumnTerminalResolver`/`AttributeTerminalResolver`/`MediaTerminalResolver`), and a
+    real `NodeRelationshipQueryTransform`, all wired to the same SQLite in-memory
+    `MockableAppDbContext` the repository layer uses (still no HTTP). This is a reversal of an
+    earlier version that still mocked `IPathExpressionParser` here, reasoning that parsing is a pure
+    function already covered by `PathExpressionParserTests` — that left this layer unable to catch a
+    real grammar bug in the full pipeline (a hand-built `PathExpression` always matched exactly what
+    the test expected, regardless of whether the real regex would have parsed the same path string
+    the same way). `ResolveAsync_EdgeWithNoTerminal_ReturnsError`/
+    `ResolveAsync_EdgeNameContainingReservedCharacter_ReturnsError` exist specifically to exercise
+    grammar edge cases through the real end-to-end pipeline that a mocked parser could never actually
+    verify. **`Repositories/PathResolutionRepositoryTests.cs` is a separate, second test file covering
+    the same class** — where the Components version exercises the real subsystem end-to-end, the
+    Repositories version mocks **every** one of `PathResolutionRepository`'s constructor dependencies,
+    `IAppDbContext` included (`IPathExpressionParser`, `ITerminalResolverFactory`, `ITerminalResolver`,
+    `IQueryTransform<KnowledgeNode, KnowledgeNode>`), and asserts pure dispatch/composition logic —
     parse failure short-circuits before any resolver is touched, terminal kind picks the right
     resolver, multiple edges fold the query transform once per edge in order, and each independent
     query in a batch resolves separately. This works even though `IQueryable<T>.FirstOrDefaultAsync()`
     normally needs a real `IAsyncQueryProvider` behind it, because the mocked
     `ITerminalResolver.ResolveAsync` intercepts before the composed-but-unexecuted `IQueryable`
-    chain is ever enumerated — the still-required `IAppDbContext` constructor parameter is a real
-    (but untouched) `MockableAppDbContext`, present purely because the constructor demands one.
+    chain is ever enumerated — the `IAppDbContext` mock only needs `KnowledgeNode` set up (via
+    `MockQueryable.Moq`'s `BuildMockDbSet()`, since `IAppDbContext.KnowledgeNode` is typed
+    `DbSet<KnowledgeNode>`, not a bare `IQueryable`) so `TraversePathToNode`'s
+    `_db.KnowledgeNode.AsNoTracking().Where(...)` call has something to return; the resulting
+    queryable is still never enumerated. This reverses an earlier version that used a real (but
+    untouched) `MockableAppDbContext` here purely because the constructor demanded some
+    `IAppDbContext` — that left one collaborator un-mocked in a layer meant to mock every one of
+    them.
     The three `IQueryTransform` implementations each have their own dedicated test file too
     (`QueryTransforms/` under `MnemoToad.Knowledge.Tests/`, mirroring the source folder) — these DO
     touch a real DB (each calls `.FirstOrDefaultAsync()`/`.ToListAsync()` on a query it builds

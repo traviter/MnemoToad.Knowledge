@@ -1,4 +1,3 @@
-using Moq;
 using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
@@ -13,35 +12,40 @@ namespace MnemoToad.Knowledge.Tests.Components;
 public class PathResolutionRepositoryTests
 {
     private MockableAppDbContext _db = null!;
-    private Mock<IPathExpressionParser> _parser = null!;
     private PathResolutionRepository _repository = null!;
 
     [SetUp]
     public void SetUp()
     {
         _db = new MockableAppDbContext();
-        _parser = new Mock<IPathExpressionParser>();
-        _repository = new PathResolutionRepository(_db, _parser.Object, new TerminalResolverFactory(_db), new NodeRelationshipQueryTransform(_db));
+        _repository = new PathResolutionRepository(_db, new PathExpressionParser(), new TerminalResolverFactory(_db), new NodeRelationshipQueryTransform(_db));
     }
 
     [TearDown]
     public void TearDown() => _db.Dispose();
 
-    private void SetupParse(string path, PathExpression? expression) =>
-        _parser.Setup(p => p.TryParse(path, out expression)).Returns(true);
-
-    private void SetupParseFailure(string path)
-    {
-        PathExpression? expression = null;
-        _parser.Setup(p => p.TryParse(path, out expression)).Returns(false);
-    }
-
     [Test]
     public async Task ResolveAsync_UnparseablePath_ReturnsError()
     {
-        SetupParseFailure("not-a-valid-path");
-
         var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), "not-a-valid-path"));
+
+        Assert.That(result.Value, Is.Null);
+        Assert.That(result.Error, Is.EqualTo("Invalid Path DSL syntax."));
+    }
+
+    [Test]
+    public async Task ResolveAsync_EdgeWithNoTerminal_ReturnsError()
+    {
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), ">capital"));
+
+        Assert.That(result.Value, Is.Null);
+        Assert.That(result.Error, Is.EqualTo("Invalid Path DSL syntax."));
+    }
+
+    [Test]
+    public async Task ResolveAsync_EdgeNameContainingReservedCharacter_ReturnsError()
+    {
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), ">a_b.value"));
 
         Assert.That(result.Value, Is.Null);
         Assert.That(result.Error, Is.EqualTo("Invalid Path DSL syntax."));
@@ -50,8 +54,6 @@ public class PathResolutionRepositoryTests
     [Test]
     public async Task ResolveAsync_NodeNotFound_ReturnsError()
     {
-        SetupParse("_canonicalName", new PathExpression([], PathTerminalKind.Column, "canonicalName"));
-
         var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), "_canonicalName"));
 
         Assert.That(result.Value, Is.Null);
@@ -63,7 +65,6 @@ public class PathResolutionRepositoryTests
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "France");
-        SetupParse("_canonicalName", new PathExpression([], PathTerminalKind.Column, "canonicalName"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_canonicalName"));
 
@@ -76,7 +77,6 @@ public class PathResolutionRepositoryTests
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse("_id", new PathExpression([], PathTerminalKind.Column, "id"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_id"));
 
@@ -89,7 +89,6 @@ public class PathResolutionRepositoryTests
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id, description: null);
-        SetupParse("_description", new PathExpression([], PathTerminalKind.Column, "description"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_description"));
 
@@ -102,7 +101,6 @@ public class PathResolutionRepositoryTests
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse("_bogus", new PathExpression([], PathTerminalKind.Column, "bogus"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "_bogus"));
 
@@ -116,7 +114,6 @@ public class PathResolutionRepositoryTests
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
         await _db.CreateKnowledgeNodeAttributeAsync(node.Id, "population", JsonValue.Create(68000000));
-        SetupParse(".population", new PathExpression([], PathTerminalKind.Attribute, "population"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ".population"));
 
@@ -129,7 +126,6 @@ public class PathResolutionRepositoryTests
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse(".gdp", new PathExpression([], PathTerminalKind.Attribute, "gdp"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ".gdp"));
 
@@ -144,7 +140,6 @@ public class PathResolutionRepositoryTests
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
         var mediaAsset = await _db.CreateMediaAssetAsync();
         await _db.CreateKnowledgeNodeMediaAsync(node.Id, "flag", mediaAsset.Id, "A flag");
-        SetupParse("#flag", new PathExpression([], PathTerminalKind.Media, "flag"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "#flag"));
 
@@ -163,7 +158,6 @@ public class PathResolutionRepositoryTests
         var mediaAsset = await _db.CreateMediaAssetAsync();
         await _db.CreateKnowledgeNodeMediaAsync(node.Id, "coatOfArms", mediaAsset.Id, "A coat of arms",
             new JsonObject { ["id"] = mediaAsset.Id.ToString(), ["alt_text"] = "A coat of arms", ["credit"] = "Wikimedia Commons" });
-        SetupParse("#coatOfArms", new PathExpression([], PathTerminalKind.Media, "coatOfArms"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "#coatOfArms"));
 
@@ -180,7 +174,6 @@ public class PathResolutionRepositoryTests
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse("#flag", new PathExpression([], PathTerminalKind.Media, "flag"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, "#flag"));
 
@@ -196,7 +189,6 @@ public class PathResolutionRepositoryTests
         var target = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "Paris");
         var relationshipType = await _db.CreateRelationshipTypeAsync(name: "capital", inverseName: "capitalOf");
         await _db.CreateKnowledgeRelationAsync(source.Id, relationshipType.Id, target.Id);
-        SetupParse(">capital_canonicalName", new PathExpression(["capital"], PathTerminalKind.Column, "canonicalName"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(source.Id, ">capital_canonicalName"));
 
@@ -209,7 +201,6 @@ public class PathResolutionRepositoryTests
     {
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
-        SetupParse(">doesNotExist_canonicalName", new PathExpression(["doesNotExist"], PathTerminalKind.Column, "canonicalName"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(node.Id, ">doesNotExist_canonicalName"));
 
@@ -227,7 +218,6 @@ public class PathResolutionRepositoryTests
         var partOf = await _db.CreateRelationshipTypeAsync(name: "partOf");
         await _db.CreateKnowledgeRelationAsync(city.Id, partOf.Id, region.Id);
         await _db.CreateKnowledgeRelationAsync(region.Id, partOf.Id, country.Id);
-        SetupParse(">partOf>partOf_canonicalName", new PathExpression(["partOf", "partOf"], PathTerminalKind.Column, "canonicalName"));
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(city.Id, ">partOf>partOf_canonicalName"));
 
@@ -241,9 +231,6 @@ public class PathResolutionRepositoryTests
         var nodeType = await _db.CreateNodeTypeAsync();
         var node = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "France");
         await _db.CreateKnowledgeNodeAttributeAsync(node.Id, "population", JsonValue.Create(68000000));
-        SetupParse("_canonicalName", new PathExpression([], PathTerminalKind.Column, "canonicalName"));
-        SetupParse(".population", new PathExpression([], PathTerminalKind.Attribute, "population"));
-        SetupParse(".gdp", new PathExpression([], PathTerminalKind.Attribute, "gdp"));
 
         var results = await _repository.ResolveAsync(
         [
