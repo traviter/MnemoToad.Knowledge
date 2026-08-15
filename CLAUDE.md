@@ -616,8 +616,8 @@
     nullable (no media at all), never the value at a present key. `Media` didn't start this way —
     it was originally `Dictionary<string, JsonObject?>?`, copied from `Attributes`' shape without
     checking whether the same nullability reasoning actually applied to it. It doesn't: a media
-    stanza can never legitimately be absent once its key exists (`ExtractMediaFields` already
-    guarantees `id`/`alt_text` at write time, unlike an attribute's value, which — before the fix
+    stanza can never legitimately be absent once its key exists (`KnowledgeNodeMediaJsonMapper`
+    already guarantees `id`/`alt_text` at write time, unlike an attribute's value, which — before the fix
     described in the `KnowledgeNodeAttribute.Value` bullet above — genuinely could be JSON `null`.**
     `KnowledgeNodeRequest.Media`
     is the *same type*, so `KnowledgeNodesController.Create`/`Update` just do
@@ -634,22 +634,64 @@
   - **The entire per-key stanza — `id`, `alt_text`, and any other client-supplied fields — is stored
     verbatim in `metadata`, not just the fields the API happens to care about.** The user's framing:
     "if it's easiest, maybe just store the entire stanza since denormalizing the ID and alt_text
-    isn't that much data." `KnowledgeNodeRepository`'s private `ExtractMediaFields(key, stanza)`
-    pulls `id` (required — parsed as a `Guid`) and `alt_text` (required — "Accessibility is a
-    requirement," validated identically to `id`, not treated as optional) out into their own real
-    `media_asset_id`/`alt_text` columns for future querying, but `Metadata` is assigned the whole
-    incoming `JsonObject` as-is, redundancy and all — a `GET` response for that key is `metadata`
-    read back with `id`/`alt_text` re-overridden from the two extracted columns
-    (`KnowledgeNodeMediaExtensions.ToJson()`, in `MnemoToad.Knowledge.Data/Entities/`, shared with
-    the Path Resolution media terminal — see below) rather than reconstructed purely from them. A
-    no-op in practice, since both are already in sync at write time, but a guardrail against them
-    ever silently drifting. A missing or
-    wrong-typed `id`/`alt_text` throws `ValidationException` (`"The media entry '{key}' must include
-    a valid 'id'."` / `"...'alt_text'."`), caught by the controller's existing
-    `ValidationException → 400` pattern, same as every other repository-level validation failure —
-    even though this specific check isn't a DB constraint translation (nothing for Postgres to catch
-    here; the row can't even be built yet), it still belongs in the repository, consistent with
-    "repository owns write-time translation, no service layer."
+    isn't that much data."
+  - **All `KnowledgeNodeMedia`↔`JsonObject` translation lives behind
+    `IEntityJsonMapper<TEntity>`/`KnowledgeNodeMediaJsonMapper`
+    (`MnemoToad.Knowledge.Data/Common/IEntityJsonMapper.cs`,
+    `MnemoToad.Knowledge.Data/EntityMappers/KnowledgeNodeMediaJsonMapper.cs`), not in the repository.**
+    `IEntityJsonMapper<TEntity>` is `JsonObject ToJson(TEntity entity)` /
+    `void UpdateFromJson(JsonObject json, TEntity entity)` — deliberately general-purpose (like
+    `Result<T>`/`Error` below), living in `Common/` rather than alongside its implementations, since
+    more entities are expected to grow their own `IEntityJsonMapper<TEntity>` implementation over
+    time and the interface should stay entity-agnostic. Implementations themselves live in their own
+    `EntityMappers/` folder/namespace (sibling to `Entities/`, `Repositories/`, etc., matching this
+    project's plural-folder-name convention) rather than inside `Entities/` — a mapper is a behavior
+    attached to an entity, not the entity's own shape, so it doesn't belong in the same folder as the
+    plain data classes.
+    **There is deliberately no `FromJson`/constructor-style method on the interface** — an earlier
+    version had `TEntity FromJson(JsonObject json)`, but building a `KnowledgeNodeMedia` from the
+    JSON stanza alone doesn't work: the mapper only ever sees the stanza, never the
+    `KnowledgeNodeId`/`Key` context that identifies which node and which dictionary key it belongs
+    to, since those come from outside the JSON entirely (the parent `KnowledgeNode`'s id and the
+    `Media` dictionary's key). `FromJson` was returning a half-built entity that
+    `KnowledgeNodeRepository` then had to patch `KnowledgeNodeId`/`Key` onto after the fact. Reversed
+    so the caller constructs the entity with whatever context it already owns, then calls
+    `UpdateFromJson` to populate the JSON-derived fields — a single method that works identically for
+    both a brand-new entity and an existing tracked one, since "update fields on an entity" is right
+    either way; there's no meaningful difference between "just-constructed" and "loaded from the DB"
+    from the mapper's point of view. `KnowledgeNodeRepository.BuildMedia` is now
+    `new KnowledgeNodeMedia { KnowledgeNodeId = ..., Key = key }` followed by a call to the same
+    `UpdateMedia` helper `UpdateAsync`'s existing-row path already used, rather than a separate
+    `FromJson`-based code path. This also supersedes the version before that, which put the
+    translation in `JsonObject`-extension methods (`ToKnowledgeNodeMedia`/`UpdateFrom`) — reversed
+    because extending `JsonObject` itself (a BCL type with no relation to this domain) was the wrong
+    owner for "how do I become a `KnowledgeNodeMedia`" logic.
+    `KnowledgeNodeMediaJsonMapper.UpdateFromJson` pulls `id` (required — parsed as a `Guid`) and
+    `alt_text` (required — "Accessibility is a requirement," validated identically to `id`, not
+    treated as optional) out into the passed entity's `MediaAssetId`/`AltText`, with `Metadata`
+    assigned the whole incoming `JsonObject` as-is, redundancy and all. **The mapper's own
+    `ValidationException` messages omit the media key** (`"must include a valid 'id'."` /
+    `"...'alt_text'."`) — `UpdateFromJson` has no way to know which dictionary key it's being called
+    for (the interface only passes the `JsonObject` and the entity, and a freshly-constructed
+    entity's `Key` is set by the caller for persistence, not read back by the mapper), so
+    `KnowledgeNodeRepository`'s private `UpdateMedia` wrapper catches that exception and re-throws
+    with the key prepended (`"The media entry '{key}' " + ex.Message`), reconstructing the exact same
+    wire-visible message (`"The media entry '{key}' must include a valid 'id'."`) API consumers and
+    Karate already expect; `BuildMedia` inherits this for free since it delegates to `UpdateMedia`.
+    `GetMediaAsync` (a `GET` response for that key) reads `metadata` back through
+    `_mediaMapper.ToJson(row)`, which overrides `id`/`alt_text` from the two extracted columns rather
+    than trusting them to already be reconstructed purely from `Metadata` — a no-op in practice,
+    since both are already in sync at write time, but a guardrail against them ever silently
+    drifting. `ValidationException` escaping `BuildMedia`/`UpdateMedia` is caught by the controller's
+    existing `ValidationException → 400` pattern, same as every other repository-level validation
+    failure — even though this specific check isn't a DB constraint translation (nothing for
+    Postgres to catch here; the row can't even be built yet), it still belongs in the repository,
+    consistent with "repository owns write-time translation, no service layer." `KnowledgeNodeRepository`
+    takes `IEntityJsonMapper<KnowledgeNodeMedia>` as a constructor dependency (registered in
+    `ServiceCollectionExtensions.cs`), and `TerminalResolverFactory` constructs a bare
+    `new KnowledgeNodeMediaJsonMapper()` directly for `MediaTerminalResolver`, same "build
+    collaborators itself, no DI" pattern as its other resolvers (see the `ITerminalResolverFactory`
+    bullet below).
   - **Extracting `id` reads it as a string first, then `Guid.TryParse`s it — deliberately not
     `JsonValue.TryGetValue<Guid>()` directly.** `System.Text.Json.Nodes.JsonValue.TryGetValue<T>()`
     only performs real conversion (e.g. GUID-formatted-string → `Guid`) when the node is backed by a
@@ -772,8 +814,9 @@
     that split hasn't happened yet.
   - **A media terminal (`#key`) returns the stored stanza flat** — `id`/`alt_text` overridden onto
     a clone of `Metadata`, not nested under a separate `metadata` key the way an earlier version
-    did. `KnowledgeNodeMediaExtensions.ToJson()` (`MnemoToad.Knowledge.Data/Entities/`) is the one
-    implementation, shared with `KnowledgeNodeRepository.GetMediaAsync` (see the `MediaAsset`/
+    did. `MediaTerminalResolver` takes `IEntityJsonMapper<KnowledgeNodeMedia>` as a constructor
+    dependency and calls `_mediaMapper.ToJson(media)` — the same `KnowledgeNodeMediaJsonMapper.ToJson`
+    implementation `KnowledgeNodeRepository.GetMediaAsync` uses (see the `MediaAsset`/
     `KnowledgeNodeMedia` bullet above for why that one clones too, even though its own override is
     a no-op today).
 
@@ -906,10 +949,34 @@
     all — mocking stops one level higher there, at `ITerminalResolver.ResolveAsync` itself (a plain
     `Task`-returning method, not one returning an `IQueryable` that gets enumerated afterward).
     `TerminalResolverFactory`, `Result<T>`/`Error`, and
-    `KnowledgeNodeMediaExtensions.ToJson()` have their own test files too — the latter two touch no
+    `KnowledgeNodeMediaJsonMapper` (`EntityMappers/KnowledgeNodeMediaJsonMapperTests.cs` — covers
+    `ToJson`/`UpdateFromJson`) have their own test files too — the latter two touch no
     DB at all and are plain isolated unit tests; `TerminalResolverFactory`'s only dependency
     (`IAppDbContext`) is used directly and untouched, so it's a genuine unit test despite using
     `MockableAppDbContext`.
+  - **`KnowledgeNodeRepository` follows the same dual-location split as `PathResolutionRepository`
+    once it grew a first-level collaborator to mock (`IEntityJsonMapper<KnowledgeNodeMedia>`).**
+    `Repositories/KnowledgeNodeRepositoryTests.cs` mocks `IEntityJsonMapper<KnowledgeNodeMedia>`
+    (real `MockableAppDbContext` still backs everything else, same as before) and asserts only the
+    repository's own responsibilities: `CreateAsync` constructs a new `KnowledgeNodeMedia` with
+    `KnowledgeNodeId`/`Key` already set and calls `UpdateFromJson` on it (verified via a Moq
+    `Callback` mutating the entity, since `UpdateFromJson` is `void`), `UpdateAsync` calls the same
+    for both an existing row and a newly-added one, `GetByIdAsync` keys its result dictionary by
+    `ToJson`'s return value, and a `ValidationException` thrown by the mapper is re-thrown with the
+    media key prepended (see the `MediaAsset`/`KnowledgeNodeMedia` bullet above).
+    `Components/KnowledgeNodeRepositoryTests.cs` wires a real `KnowledgeNodeMediaJsonMapper()`
+    alongside the same `MockableAppDbContext`, covering genuine end-to-end behavior the mocked
+    version can't (verbatim extra-field storage, real `id`/`alt_text` extraction, a real validation
+    failure's exact wire-visible message) — mirroring why `PathResolutionRepositoryTests` exists in
+    both locations. The four validation-detail tests that once lived only in
+    `Repositories/KnowledgeNodeRepositoryTests.cs` (missing `id`, non-GUID `id`, missing `alt_text`,
+    non-string `alt_text`) split three ways: the exhaustive rule matrix now lives solely in
+    `KnowledgeNodeMediaJsonMapperTests` (pure mapper logic, no DB, no repository involved), one
+    representative case each for "missing id" / "missing alt_text" moved to the Components version
+    to confirm the real end-to-end message, and the Repositories version keeps a single test
+    asserting only the repository's own message-wrapping behavior (a mocked mapper throwing a bare
+    `ValidationException` gets the key prepended) — deliberately not re-asserting extraction rules a
+    mocked mapper can't exercise anyway.
   - **System tests** (`MnemoToad.Knowledge.Tests/SystemTests/`) send real HTTP requests through the full app
     pipeline via `WebApplicationFactory<Program>` — see below.
 - `[SetUp]` creates a fresh mock/context/factory per test (not shared/static state), so tests can't

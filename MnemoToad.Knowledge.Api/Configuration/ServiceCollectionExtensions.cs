@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using MnemoToad.Knowledge.Api.Json;
 using MnemoToad.Knowledge.Api.Swagger;
 using MnemoToad.Knowledge.Data;
+using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
+using MnemoToad.Knowledge.Data.EntityMappers;
 using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
@@ -33,6 +35,8 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("Default")).UseSnakeCaseNamingConvention());
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
+
+        services.AddScoped<IEntityJsonMapper<KnowledgeNodeMedia>, KnowledgeNodeMediaJsonMapper>();
 
         services.AddScoped<INodeTypeRepository, NodeTypeRepository>();
         services.AddScoped<IKnowledgeNodeRepository, KnowledgeNodeRepository>();

@@ -13,31 +13,33 @@ namespace MnemoToad.Knowledge.Tests.TerminalResolvers;
 public class MediaTerminalResolverTests
 {
     private Mock<IQueryTransform<KnowledgeNode, KnowledgeNodeMedia>> _queryTransform = null!;
+    private Mock<IEntityJsonMapper<KnowledgeNodeMedia>> _mediaMapper = null!;
     private MediaTerminalResolver _resolver = null!;
 
     [SetUp]
     public void SetUp()
     {
         _queryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNodeMedia>>();
-        _resolver = new MediaTerminalResolver(_queryTransform.Object);
+        _mediaMapper = new Mock<IEntityJsonMapper<KnowledgeNodeMedia>>();
+        _resolver = new MediaTerminalResolver(_queryTransform.Object, _mediaMapper.Object);
     }
 
     [Test]
-    public async Task ResolveAsync_TransformYieldsRow_ReturnsItsJson()
+    public async Task ResolveAsync_TransformYieldsRow_ReturnsMapperJson()
     {
         var mediaAssetId = Guid.NewGuid();
         var row = new KnowledgeNodeMedia { KnowledgeNodeId = Guid.NewGuid(), Key = "flag", MediaAssetId = mediaAssetId, AltText = "A flag" };
+        var mappedJson = new JsonObject { ["id"] = mediaAssetId.ToString(), ["alt_text"] = "A flag" };
         _queryTransform
             .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "flag"))
             .Returns(new[] { row }.BuildMock());
+        _mediaMapper.Setup(m => m.ToJson(row)).Returns(mappedJson);
 
         var result = await _resolver.ResolveAsync(Enumerable.Empty<KnowledgeNode>().AsQueryable(), "flag");
 
         var success = result as Result<JsonNode>.Success;
         Assert.That(success, Is.Not.Null);
-        var value = success!.Value.AsObject();
-        Assert.That(value["id"]!.GetValue<string>(), Is.EqualTo(mediaAssetId.ToString()));
-        Assert.That(value["alt_text"]!.GetValue<string>(), Is.EqualTo("A flag"));
+        Assert.That(success!.Value, Is.SameAs(mappedJson));
     }
 
     [Test]

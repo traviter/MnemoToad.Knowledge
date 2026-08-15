@@ -1,5 +1,6 @@
 using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
+using MnemoToad.Knowledge.Data.EntityMappers;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
 using MnemoToad.Knowledge.Tests.TestSupport;
@@ -18,7 +19,7 @@ public class MediaTerminalResolverTests
     public void SetUp()
     {
         _db = new MockableAppDbContext();
-        _resolver = new MediaTerminalResolver(new MediaQueryTransform(_db));
+        _resolver = new MediaTerminalResolver(new MediaQueryTransform(_db), new KnowledgeNodeMediaJsonMapper());
     }
 
     [TearDown]

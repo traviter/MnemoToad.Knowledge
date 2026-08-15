@@ -1,3 +1,4 @@
+using MnemoToad.Knowledge.Data.EntityMappers;
 using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 
@@ -13,7 +14,7 @@ public class TerminalResolverFactory : ITerminalResolverFactory
         {
             [PathTerminalKind.Column] = new ColumnTerminalResolver(),
             [PathTerminalKind.Attribute] = new AttributeTerminalResolver(new AttributeQueryTransform(db)),
-            [PathTerminalKind.Media] = new MediaTerminalResolver(new MediaQueryTransform(db)),
+            [PathTerminalKind.Media] = new MediaTerminalResolver(new MediaQueryTransform(db), new KnowledgeNodeMediaJsonMapper()),
         };
     }
 

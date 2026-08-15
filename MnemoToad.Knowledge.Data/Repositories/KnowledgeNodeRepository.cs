@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
 using Npgsql;
 using System.ComponentModel.DataAnnotations;
@@ -9,10 +10,12 @@ namespace MnemoToad.Knowledge.Data.Repositories;
 public class KnowledgeNodeRepository : IKnowledgeNodeRepository
 {
     private readonly IAppDbContext _db;
+    private readonly IEntityJsonMapper<KnowledgeNodeMedia> _mediaMapper;
 
-    public KnowledgeNodeRepository(IAppDbContext db)
+    public KnowledgeNodeRepository(IAppDbContext db, IEntityJsonMapper<KnowledgeNodeMedia> mediaMapper)
     {
         _db = db;
+        _mediaMapper = mediaMapper;
     }
 
     public Task<List<KnowledgeNode>> GetAllAsync(Guid nodeTypeId) =>
@@ -47,15 +50,7 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
 
         foreach (var (key, stanza) in knowledgeNode.Media)
         {
-            var (mediaAssetId, altText) = ExtractMediaFields(key, stanza);
-            _db.KnowledgeNodeMedia.Add(new KnowledgeNodeMedia
-            {
-                KnowledgeNodeId = knowledgeNode.Id,
-                Key = key,
-                MediaAssetId = mediaAssetId,
-                AltText = altText,
-                Metadata = stanza
-            });
+            _db.KnowledgeNodeMedia.Add(BuildMedia(knowledgeNode.Id, key, stanza));
         }
 
         await SaveChangesAsync();
@@ -95,25 +90,11 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
 
         foreach (var (key, stanza) in knowledgeNode.Media)
         {
-            var (mediaAssetId, altText) = ExtractMediaFields(key, stanza);
             var existingRow = currentMediaRows.FirstOrDefault(r => r.Key == key);
             if (existingRow is not null)
-            {
-                existingRow.MediaAssetId = mediaAssetId;
-                existingRow.AltText = altText;
-                existingRow.Metadata = stanza;
-            }
+                UpdateMedia(key, stanza, existingRow);
             else
-            {
-                _db.KnowledgeNodeMedia.Add(new KnowledgeNodeMedia
-                {
-                    KnowledgeNodeId = existing.Id,
-                    Key = key,
-                    MediaAssetId = mediaAssetId,
-                    AltText = altText,
-                    Metadata = stanza
-                });
-            }
+                _db.KnowledgeNodeMedia.Add(BuildMedia(existing.Id, key, stanza));
         }
 
         await SaveChangesAsync();
@@ -125,28 +106,26 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
     private async Task<Dictionary<string, JsonObject>> GetMediaAsync(Guid knowledgeNodeId)
     {
         var rows = await _db.KnowledgeNodeMedia.Where(m => m.KnowledgeNodeId == knowledgeNodeId).ToListAsync();
-        return rows.ToDictionary(r => r.Key, r => r.ToJson());
+        return rows.ToDictionary(r => r.Key, r => _mediaMapper.ToJson(r));
     }
 
-    private static (Guid MediaAssetId, string AltText) ExtractMediaFields(string key, JsonObject? stanza)
+    private KnowledgeNodeMedia BuildMedia(Guid knowledgeNodeId, string key, JsonObject stanza)
     {
-        if (stanza is null
-            || !stanza.TryGetPropertyValue("id", out var idNode)
-            || idNode is not JsonValue idValue
-            || !idValue.TryGetValue<string>(out var idString)
-            || !Guid.TryParse(idString, out var mediaAssetId))
-        {
-            throw new ValidationException($"The media entry '{key}' must include a valid 'id'.");
-        }
+        var media = new KnowledgeNodeMedia { KnowledgeNodeId = knowledgeNodeId, Key = key };
+        UpdateMedia(key, stanza, media);
+        return media;
+    }
 
-        if (!stanza.TryGetPropertyValue("alt_text", out var altNode)
-            || altNode is not JsonValue altValue
-            || !altValue.TryGetValue<string>(out var altText))
+    private void UpdateMedia(string key, JsonObject stanza, KnowledgeNodeMedia existing)
+    {
+        try
         {
-            throw new ValidationException($"The media entry '{key}' must include a valid 'alt_text'.");
+            _mediaMapper.UpdateFromJson(stanza, existing);
         }
-
-        return (mediaAssetId, altText);
+        catch (ValidationException ex)
+        {
+            throw new ValidationException($"The media entry '{key}' {ex.Message}");
+        }
     }
 
     public async Task<bool> DeleteAsync(Guid id)
