@@ -16,6 +16,7 @@ public class KnowledgeNodesControllerTests
 {
     private Mock<IKnowledgeNodeRepository> _repository = null!;
     private Mock<IPathResolutionRepository> _pathResolutionRepository = null!;
+    private Mock<INodeTypeRepository> _nodeTypeRepository = null!;
     private KnowledgeNodesController _controller = null!;
 
     [SetUp]
@@ -23,7 +24,8 @@ public class KnowledgeNodesControllerTests
     {
         _repository = new Mock<IKnowledgeNodeRepository>();
         _pathResolutionRepository = new Mock<IPathResolutionRepository>();
-        _controller = new KnowledgeNodesController(_repository.Object, _pathResolutionRepository.Object);
+        _nodeTypeRepository = new Mock<INodeTypeRepository>();
+        _controller = new KnowledgeNodesController(_repository.Object, _pathResolutionRepository.Object, _nodeTypeRepository.Object);
     }
 
     [Test]
@@ -308,5 +310,58 @@ public class KnowledgeNodesControllerTests
         Assert.That(results, Has.Count.EqualTo(2));
         Assert.That(results![0].Properties.Keys, Is.EquivalentTo(new[] { "_canonicalName" }));
         Assert.That(results[1].Properties.Keys, Is.EquivalentTo(new[] { ".population" }));
+    }
+
+    [Test]
+    public async Task ResolveByType_UnknownNodeTypeName_ReturnsNotFound()
+    {
+        _nodeTypeRepository.Setup(r => r.GetByNameAsync("Country")).ReturnsAsync((NodeType?)null);
+
+        var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName"]));
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        _repository.Verify(r => r.GetAllAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ResolveByType_KnownNodeTypeName_ResolvesPathsForEveryMatchingNode()
+    {
+        var nodeTypeId = Guid.NewGuid();
+        var nodeType = new NodeType { Id = nodeTypeId, Name = "Country" };
+        var nodes = new List<KnowledgeNode>
+        {
+            new() { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "France" },
+            new() { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "Germany" },
+        };
+        _nodeTypeRepository.Setup(r => r.GetByNameAsync("Country")).ReturnsAsync(nodeType);
+        _repository.Setup(r => r.GetAllAsync(nodeTypeId)).ReturnsAsync(nodes);
+        _pathResolutionRepository.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()))
+            .ReturnsAsync((IReadOnlyList<PathResolutionQuery> queries) => queries
+                .Select(q => new ResolvedPath(q.NodeId, q.Path, JsonValue.Create($"value-for-{q.Path}"), null))
+                .ToList());
+
+        var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName", ".population"]));
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        var results = ok!.Value as List<ResolvedNodePaths>;
+        Assert.That(results, Has.Count.EqualTo(2));
+        Assert.That(results!.Select(r => r.NodeId), Is.EquivalentTo(nodes.Select(n => n.Id)));
+        Assert.That(results[0].Properties.Keys, Is.EquivalentTo(new[] { "_canonicalName", ".population" }));
+        _pathResolutionRepository.Verify(r => r.ResolveAsync(It.Is<IReadOnlyList<PathResolutionQuery>>(q => q.Count == 4)), Times.Once);
+    }
+
+    [Test]
+    public async Task ResolveByType_NodeTypeWithNoMatchingNodes_ReturnsEmptyList()
+    {
+        var nodeTypeId = Guid.NewGuid();
+        _nodeTypeRepository.Setup(r => r.GetByNameAsync("Country")).ReturnsAsync(new NodeType { Id = nodeTypeId, Name = "Country" });
+        _repository.Setup(r => r.GetAllAsync(nodeTypeId)).ReturnsAsync(new List<KnowledgeNode>());
+
+        var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName"]));
+
+        var results = (result as OkObjectResult)!.Value as List<ResolvedNodePaths>;
+        Assert.That(results, Is.Empty);
+        _pathResolutionRepository.Verify(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()), Times.Once);
     }
 }

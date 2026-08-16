@@ -1,0 +1,19 @@
+{
+  "request": { "nodeTypeName": "ZZ_Karate_Resolve_NodeType", "paths": ["#flag"] },
+  "response": [
+    {
+      "nodeId": "88888888-8888-8888-8888-888888888888",
+      "properties": {},
+      "errors": { "#flag": "Path could not be resolved." }
+    },
+    {
+      "nodeId": "55555555-5555-5555-5555-555555555555",
+      "properties": { "#flag": { "id": "33333333-3333-3333-3333-333333333333", "alt_text": "A flag" } }
+    },
+    {
+      "nodeId": "66666666-6666-6666-6666-666666666666",
+      "properties": {},
+      "errors": { "#flag": "Path could not be resolved." }
+    }
+  ]
+}

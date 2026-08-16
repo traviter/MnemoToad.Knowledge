@@ -73,4 +73,66 @@ public class KnowledgeNodesControllerResolveSystemTests
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
+
+    [Test]
+    public async Task ResolveByType_ReturnsExpectedProperties()
+    {
+        var testCase = ReadCase("resolve-by-type");
+        var response = await _client.PostAsync("/nodes/resolve/type",
+            new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var actual = JsonNode.Parse(await response.Content.ReadAsStringAsync());
+        var expected = testCase["response"];
+        Assert.That(JsonNode.DeepEquals(actual, expected), Is.True,
+            $"Expected:\n{expected}\nActual:\n{actual}");
+    }
+
+    [Test]
+    public async Task ResolveByType_MultiHopEdgePath_ReturnsExpectedProperties()
+    {
+        var testCase = ReadCase("resolve-by-type-multi-hop");
+        var response = await _client.PostAsync("/nodes/resolve/type",
+            new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var actual = JsonNode.Parse(await response.Content.ReadAsStringAsync());
+        var expected = testCase["response"];
+        Assert.That(JsonNode.DeepEquals(actual, expected), Is.True,
+            $"Expected:\n{expected}\nActual:\n{actual}");
+    }
+
+    [Test]
+    public async Task ResolveByType_SomeNodesResolveAndSomeError_ReturnsBothInOneResponse()
+    {
+        var testCase = ReadCase("resolve-by-type-partial-results");
+        var response = await _client.PostAsync("/nodes/resolve/type",
+            new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var actual = JsonNode.Parse(await response.Content.ReadAsStringAsync());
+        var expected = testCase["response"];
+        Assert.That(JsonNode.DeepEquals(actual, expected), Is.True,
+            $"Expected:\n{expected}\nActual:\n{actual}");
+    }
+
+    [Test]
+    public async Task ResolveByType_UnknownNodeTypeName_ReturnsNotFound()
+    {
+        var testCase = ReadCase("resolve-by-type-unknown-name");
+        var response = await _client.PostAsync("/nodes/resolve/type",
+            new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task ResolveByType_MissingNodeTypeName_ReturnsBadRequest()
+    {
+        var testCase = ReadCase("resolve-by-type-missing-name");
+        var response = await _client.PostAsync("/nodes/resolve/type",
+            new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
 }

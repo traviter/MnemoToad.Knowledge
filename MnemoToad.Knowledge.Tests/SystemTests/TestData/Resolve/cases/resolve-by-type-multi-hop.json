@@ -1,0 +1,30 @@
+{
+  "request": {
+    "nodeTypeName": "ZZ_Karate_Resolve_NodeType",
+    "paths": [">ZZKarateResolveCapital_canonicalName", ">ZZKarateResolveCapital.population"]
+  },
+  "response": [
+    {
+      "nodeId": "88888888-8888-8888-8888-888888888888",
+      "properties": {},
+      "errors": {
+        ">ZZKarateResolveCapital_canonicalName": "Path could not be resolved.",
+        ">ZZKarateResolveCapital.population": "Path could not be resolved."
+      }
+    },
+    {
+      "nodeId": "55555555-5555-5555-5555-555555555555",
+      "properties": {
+        ">ZZKarateResolveCapital_canonicalName": "ZZ_Karate_Resolve_TargetNode",
+        ">ZZKarateResolveCapital.population": 2100000
+      }
+    },
+    {
+      "nodeId": "66666666-6666-6666-6666-666666666666",
+      "properties": {
+        ">ZZKarateResolveCapital_canonicalName": "ZZ_Karate_Resolve_PrimaryNode",
+        ">ZZKarateResolveCapital.population": 68000000
+      }
+    }
+  ]
+}

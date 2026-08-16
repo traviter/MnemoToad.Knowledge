@@ -6,6 +6,7 @@ public interface INodeTypeRepository
 {
     Task<List<NodeType>> GetAllAsync();
     Task<NodeType?> GetByIdAsync(Guid id);
+    Task<NodeType?> GetByNameAsync(string name);
     Task<NodeType> CreateAsync(NodeType nodeType);
     Task<NodeType?> UpdateAsync(NodeType nodeType);
     Task<bool> DeleteAsync(Guid id);

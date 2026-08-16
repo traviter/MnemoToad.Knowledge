@@ -57,6 +57,26 @@ public class NodeTypeRepositoryTests
     }
 
     [Test]
+    public async Task GetByNameAsync_WhenExists_ReturnsNodeType()
+    {
+        var nodeType = new NodeType { Id = Guid.NewGuid(), Name = "Person" };
+        await _db.NodeType.AddAsync(nodeType);
+        await _db.SaveChangesAsync();
+
+        var found = await _repository.GetByNameAsync("Person");
+
+        Assert.That(found?.Id, Is.EqualTo(nodeType.Id));
+    }
+
+    [Test]
+    public async Task GetByNameAsync_WhenNotFound_ReturnsNull()
+    {
+        var found = await _repository.GetByNameAsync("NoSuchName");
+
+        Assert.That(found, Is.Null);
+    }
+
+    [Test]
     public async Task CreateAsync_PersistsAndReturnsNodeType()
     {
         var nodeType = new NodeType { Id = Guid.NewGuid(), Name = "Person" };

@@ -18,11 +18,16 @@ public class KnowledgeNodesController : ControllerBase
 {
     private readonly IKnowledgeNodeRepository _repository;
     private readonly IPathResolutionRepository _pathResolutionRepository;
+    private readonly INodeTypeRepository _nodeTypeRepository;
 
-    public KnowledgeNodesController(IKnowledgeNodeRepository repository, IPathResolutionRepository pathResolutionRepository)
+    public KnowledgeNodesController(
+        IKnowledgeNodeRepository repository,
+        IPathResolutionRepository pathResolutionRepository,
+        INodeTypeRepository nodeTypeRepository)
     {
         _repository = repository;
         _pathResolutionRepository = pathResolutionRepository;
+        _nodeTypeRepository = nodeTypeRepository;
     }
 
     /// <summary>
@@ -143,16 +148,47 @@ public class KnowledgeNodesController : ControllerBase
     [HttpPost("resolve")]
     [ProducesResponseType(typeof(IEnumerable<ResolvedNodePaths>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Resolve([Required, MinLength(1)] List<ResolvePathsRequestItem>? items)
+    public async Task<IActionResult> Resolve([Required, MinLength(1)] List<ResolvePathsRequestItem>? items) =>
+        Ok(await ResolveItemsAsync(items!));
+
+    /// <summary>
+    /// Finds every KnowledgeNode of the named NodeType and resolves the same set of Property Path
+    /// DSL expressions against each — equivalent to calling <c>GET /nodes?nodeTypeId=...</c> then
+    /// feeding every returned node id, paired with the same paths, into <c>POST /nodes/resolve</c>.
+    /// </summary>
+    /// <param name="request">The NodeType name and the paths to resolve against each of its nodes.</param>
+    /// <response code="200">
+    /// One result per matching KnowledgeNode, same shape as <c>POST /nodes/resolve</c>. Empty array
+    /// if no KnowledgeNode has that NodeType.
+    /// </response>
+    /// <response code="400">
+    /// <c>nodeTypeName</c> or <c>paths</c> was missing/empty, or a path isn't valid Path DSL syntax.
+    /// </response>
+    /// <response code="404">No NodeType exists with that name.</response>
+    [HttpPost("resolve/type")]
+    [ProducesResponseType(typeof(IEnumerable<ResolvedNodePaths>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResolveByType(ResolveByNodeTypeRequest request)
     {
-        var queries = items!
+        var nodeType = await _nodeTypeRepository.GetByNameAsync(request.NodeTypeName!);
+        if (nodeType is null) return NotFound();
+
+        var nodes = await _repository.GetAllAsync(nodeType.Id);
+        var items = nodes.Select(n => new ResolvePathsRequestItem(n.Id, request.Paths)).ToList();
+        return Ok(await ResolveItemsAsync(items));
+    }
+
+    private async Task<List<ResolvedNodePaths>> ResolveItemsAsync(List<ResolvePathsRequestItem> items)
+    {
+        var queries = items
             .SelectMany(item => item.Paths!.Select(path => new PathResolutionQuery(item.NodeId!.Value, path)))
             .ToList();
         var resolved = await _pathResolutionRepository.ResolveAsync(queries);
 
         var results = new List<ResolvedNodePaths>();
         var cursor = 0;
-        foreach (var item in items!)
+        foreach (var item in items)
         {
             var properties = new Dictionary<string, JsonNode?>();
             Dictionary<string, string>? errors = null;
@@ -166,6 +202,6 @@ public class KnowledgeNodesController : ControllerBase
             }
             results.Add(new ResolvedNodePaths(item.NodeId!.Value, properties, errors));
         }
-        return Ok(results);
+        return results;
     }
 }

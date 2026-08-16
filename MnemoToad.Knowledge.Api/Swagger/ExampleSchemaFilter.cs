@@ -115,6 +115,11 @@ public class ExampleSchemaFilter : ISchemaFilter
                 ["paths"] = new JsonArray { "_canonicalName" },
             },
         },
+        [typeof(ResolveByNodeTypeRequest)] = () => new JsonObject
+        {
+            ["nodeTypeName"] = "Country",
+            ["paths"] = new JsonArray { "_canonicalName", ".population", "#flag" },
+        },
         [typeof(IEnumerable<ResolvedNodePaths>)] = () => new JsonArray
         {
             new JsonObject
