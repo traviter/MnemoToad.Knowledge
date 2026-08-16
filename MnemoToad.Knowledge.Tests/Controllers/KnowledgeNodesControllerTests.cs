@@ -28,11 +28,22 @@ public class KnowledgeNodesControllerTests
         _controller = new KnowledgeNodesController(_repository.Object, _pathResolutionRepository.Object, _nodeTypeRepository.Object);
     }
 
-    [Test]
-    public async Task GetAll_WithNodeTypeNameFilter_PassesFilterToRepository()
+    private List<string> TrackNodeThenNodeTypeQueryOrder(string nodeTypeName, List<KnowledgeNode> nodes, List<NodeType> nodeTypes)
     {
-        var nodes = new List<KnowledgeNode>();
-        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType> { new() { Id = Guid.NewGuid(), Name = "Country" } });
+        var callOrder = new List<string>();
+        _repository.Setup(r => r.GetAllAsync(nodeTypeName))
+            .Callback(() => callOrder.Add("nodes"))
+            .ReturnsAsync(nodes);
+        _nodeTypeRepository.Setup(r => r.GetAllAsync())
+            .Callback(() => callOrder.Add("nodeTypes"))
+            .ReturnsAsync(nodeTypes);
+        return callOrder;
+    }
+
+    [Test]
+    public async Task GetAll_WithMatchingNodes_ReturnsThemWithoutCheckingNodeTypeExistence()
+    {
+        var nodes = new List<KnowledgeNode> { new() { Id = Guid.NewGuid(), CanonicalName = "France" } };
         _repository.Setup(r => r.GetAllAsync("Country")).ReturnsAsync(nodes);
 
         var result = await _controller.GetAll("Country");
@@ -40,18 +51,32 @@ public class KnowledgeNodesControllerTests
         var ok = result as OkObjectResult;
         Assert.That(ok, Is.Not.Null);
         Assert.That(ok!.Value, Is.SameAs(nodes));
-        _repository.Verify(r => r.GetAllAsync("Country"), Times.Once);
+        _nodeTypeRepository.Verify(r => r.GetAllAsync(), Times.Never);
     }
 
     [Test]
-    public async Task GetAll_WithUnknownNodeTypeName_ReturnsNotFound()
+    public async Task GetAll_WithKnownNodeTypeNameAndNoMatchingNodes_QueriesNodesBeforeCheckingExistence_ReturnsEmptyList()
     {
-        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType>());
+        var callOrder = TrackNodeThenNodeTypeQueryOrder("Country", new List<KnowledgeNode>(),
+            new List<NodeType> { new() { Id = Guid.NewGuid(), Name = "Country" } });
+
+        var result = await _controller.GetAll("Country");
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        Assert.That(ok!.Value as List<KnowledgeNode>, Is.Empty);
+        Assert.That(callOrder, Is.EqualTo(new[] { "nodes", "nodeTypes" }));
+    }
+
+    [Test]
+    public async Task GetAll_WithUnknownNodeTypeName_QueriesNodesBeforeCheckingExistence_ReturnsNotFound()
+    {
+        var callOrder = TrackNodeThenNodeTypeQueryOrder("NoSuchType", new List<KnowledgeNode>(), new List<NodeType>());
 
         var result = await _controller.GetAll("NoSuchType");
 
         Assert.That(result, Is.InstanceOf<NotFoundResult>());
-        _repository.Verify(r => r.GetAllAsync(It.IsAny<string>()), Times.Never);
+        Assert.That(callOrder, Is.EqualTo(new[] { "nodes", "nodeTypes" }));
     }
 
     [Test]
@@ -324,7 +349,7 @@ public class KnowledgeNodesControllerTests
     }
 
     [Test]
-    public async Task ResolveByType_KnownNodeTypeName_ResolvesPathsForEveryMatchingNode()
+    public async Task ResolveByType_KnownNodeTypeName_ResolvesPathsForEveryMatchingNodeWithoutCheckingNodeTypeExistence()
     {
         var nodeTypeId = Guid.NewGuid();
         var nodes = new List<KnowledgeNode>
@@ -332,7 +357,6 @@ public class KnowledgeNodesControllerTests
             new() { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "France" },
             new() { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "Germany" },
         };
-        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType> { new() { Id = nodeTypeId, Name = "Country" } });
         _repository.Setup(r => r.GetAllAsync("Country")).ReturnsAsync(nodes);
         _pathResolutionRepository.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()))
             .ReturnsAsync((IReadOnlyList<PathResolutionQuery> queries) => queries
@@ -348,29 +372,32 @@ public class KnowledgeNodesControllerTests
         Assert.That(results!.Select(r => r.NodeId), Is.EquivalentTo(nodes.Select(n => n.Id)));
         Assert.That(results[0].Properties.Keys, Is.EquivalentTo(new[] { "_canonicalName", ".population" }));
         _pathResolutionRepository.Verify(r => r.ResolveAsync(It.Is<IReadOnlyList<PathResolutionQuery>>(q => q.Count == 4)), Times.Once);
+        _nodeTypeRepository.Verify(r => r.GetAllAsync(), Times.Never);
     }
 
     [Test]
-    public async Task ResolveByType_KnownNodeTypeNameWithNoMatchingNodes_ReturnsEmptyList()
+    public async Task ResolveByType_KnownNodeTypeNameWithNoMatchingNodes_QueriesNodesBeforeCheckingExistence_ReturnsEmptyList()
     {
-        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType> { new() { Id = Guid.NewGuid(), Name = "Country" } });
-        _repository.Setup(r => r.GetAllAsync("Country")).ReturnsAsync(new List<KnowledgeNode>());
+        var callOrder = TrackNodeThenNodeTypeQueryOrder("Country", new List<KnowledgeNode>(),
+            new List<NodeType> { new() { Id = Guid.NewGuid(), Name = "Country" } });
 
         var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName"]));
 
         var results = (result as OkObjectResult)!.Value as List<ResolvedNodePaths>;
         Assert.That(results, Is.Empty);
+        Assert.That(callOrder, Is.EqualTo(new[] { "nodes", "nodeTypes" }));
         _pathResolutionRepository.Verify(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()), Times.Once);
     }
 
     [Test]
-    public async Task ResolveByType_UnknownNodeTypeName_ReturnsNotFound()
+    public async Task ResolveByType_UnknownNodeTypeName_QueriesNodesBeforeCheckingExistence_ReturnsNotFound()
     {
-        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType>());
+        var callOrder = TrackNodeThenNodeTypeQueryOrder("NoSuchType", new List<KnowledgeNode>(), new List<NodeType>());
 
         var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("NoSuchType", ["_canonicalName"]));
 
         Assert.That(result, Is.InstanceOf<NotFoundResult>());
-        _repository.Verify(r => r.GetAllAsync(It.IsAny<string>()), Times.Never);
+        Assert.That(callOrder, Is.EqualTo(new[] { "nodes", "nodeTypes" }));
+        _pathResolutionRepository.Verify(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()), Times.Never);
     }
 }

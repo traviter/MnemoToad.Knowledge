@@ -42,8 +42,12 @@ public class KnowledgeNodesController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<KnowledgeNode>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetAll([FromQuery, Required] string? nodeTypeName) =>
-        await NodeTypeExistsAsync(nodeTypeName!) ? Ok(await _repository.GetAllAsync(nodeTypeName!)) : NotFound();
+    public async Task<IActionResult> GetAll([FromQuery, Required] string? nodeTypeName)
+    {
+        var nodes = await _repository.GetAllAsync(nodeTypeName!);
+        if (nodes.Count == 0 && !await NodeTypeExistsAsync(nodeTypeName!)) return NotFound();
+        return Ok(nodes);
+    }
 
     /// <summary>Gets a single KnowledgeNode by id, including its full attributes and media.</summary>
     /// <param name="id">The KnowledgeNode's id.</param>
@@ -173,9 +177,9 @@ public class KnowledgeNodesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ResolveByType(ResolveByNodeTypeRequest request)
     {
-        if (!await NodeTypeExistsAsync(request.NodeTypeName!)) return NotFound();
-
         var nodes = await _repository.GetAllAsync(request.NodeTypeName!);
+        if (nodes.Count == 0 && !await NodeTypeExistsAsync(request.NodeTypeName!)) return NotFound();
+
         var items = nodes.Select(n => new ResolvePathsRequestItem(n.Id, request.Paths)).ToList();
         return Ok(await ResolveItemsAsync(items));
     }

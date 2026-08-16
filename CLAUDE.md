@@ -423,18 +423,31 @@
     valid name), so the old "invalid GUID format" `400` case has no equivalent here.
   - **`GetAll` distinguishes "NodeType doesn't exist" (`404`) from "NodeType exists but has no
     KnowledgeNodes" (`200` `[]`)** — a caller needs those told apart (most likely a typo'd name vs.
-    a real, if unusual, empty state), so `GetAll` checks existence first via a shared private
-    `NodeTypeExistsAsync(string nodeTypeName)` helper (`(await _nodeTypeRepository.GetAllAsync())
-    .Any(nt => nt.Name == nodeTypeName)` — reuses `INodeTypeRepository`'s existing `GetAllAsync()`,
-    no dedicated lookup method added) before calling `_repository.GetAllAsync(nodeTypeName)`. This
-    reverses an earlier version of this bullet, and this codebase's own established precedent for
+    a real, if unusual, empty state). This reverses this codebase's own established precedent for
     the old `Guid`-keyed parameter (an explicit all-zero GUID was deliberately accepted as `200 OK`
     `[]`, no existence check at all — see the superseded design note below) — reversed once the user
     pointed out that, for a *name*-based filter, an unmatched value is far more likely to be a
     genuine caller mistake than a deliberately-chosen boundary value the way `Guid.Empty` was, so
     silently returning an empty list hides exactly the kind of error a caller most needs surfaced.
-    `POST /nodes/resolve/type` (below) needed this same distinction and shares the same
-    `NodeTypeExistsAsync` helper.
+  - **The existence check only runs when the node query itself comes back empty — `GetAll` calls
+    `_repository.GetAllAsync(nodeTypeName)` first, not the other way around.**
+    ```csharp
+    var nodes = await _repository.GetAllAsync(nodeTypeName!);
+    if (nodes.Count == 0 && !await NodeTypeExistsAsync(nodeTypeName!)) return NotFound();
+    return Ok(nodes);
+    ```
+    The common case (the NodeType exists and has nodes) is the one that matters for request
+    latency, and it needs exactly one query either way — checking existence *first* would add a
+    second round trip (`_nodeTypeRepository.GetAllAsync()`) to every request, most of which never
+    need it. `&&`'s short-circuit means `NodeTypeExistsAsync` only runs on the empty-result path,
+    where the extra round trip is the price of distinguishing the two `404`/`200` cases, not a tax
+    on the common one. An earlier version of this same rework checked existence unconditionally,
+    before querying nodes at all — reversed once the user flagged the ordering directly. The shared
+    private `NodeTypeExistsAsync(string nodeTypeName)` helper itself is unchanged
+    (`(await _nodeTypeRepository.GetAllAsync()).Any(nt => nt.Name == nodeTypeName)` — reuses
+    `INodeTypeRepository`'s existing `GetAllAsync()`, no dedicated lookup method added); only the
+    order it's called in relative to the node query moved. `POST /nodes/resolve/type` (below) needed
+    this same distinction and follows the identical query-first ordering, sharing the same helper.
     - **Superseded design note:** an earlier version of this same rework left `GetAll` matching its
       old Guid-based "no existence check, always `200`" behavior even after the parameter became a
       name — reasoning that nothing about that precedent was Guid-specific. Reversed once the user
@@ -923,13 +936,14 @@
   ResolveByNodeTypeRequest.cs`), both `[Required]`, `Paths` reusing the same
   `[MinLength(1), ValidPathExpression]` as `POST /nodes/resolve`'s `ResolvePathsRequestItem`.
   Response is the exact same `List<ResolvedNodePaths>` shape `POST /nodes/resolve` returns.
-  `KnowledgeNodesController.ResolveByType` checks the NodeType exists via the same
-  `NodeTypeExistsAsync` private helper `GetAll` uses (see the `GET /nodes` bullet above), `404` on a
-  miss, then `_repository.GetAllAsync(nodeTypeName)`, builds a `ResolvePathsRequestItem` per returned
-  node with the same `Paths`, and resolves through the same `ResolveItemsAsync` private helper
-  `Resolve` itself calls (extracted specifically so both resolve actions share the
-  queries→`ResolveAsync`→cursor-walk loop instead of duplicating it). Constructor needs
-  `INodeTypeRepository` for this — it had briefly been dropped when `IKnowledgeNodeRepository
+  `KnowledgeNodesController.ResolveByType` follows the exact same query-first ordering as `GetAll`
+  (see the `GET /nodes` bullet above) — `_repository.GetAllAsync(nodeTypeName)` first, and only
+  checks existence (the same shared `NodeTypeExistsAsync` helper, `404` on a miss) when that comes
+  back empty — before building a `ResolvePathsRequestItem` per returned node with the same `Paths`
+  and resolving through the same `ResolveItemsAsync` private helper `Resolve` itself calls (extracted
+  specifically so both resolve actions share the queries→`ResolveAsync`→cursor-walk loop instead of
+  duplicating it). Constructor needs `INodeTypeRepository` for this — it had briefly been dropped
+  when `IKnowledgeNodeRepository
   .GetAllAsync` first became name-based (nothing in the controller needed it at that point), then
   reinstated once the `404`-vs-`200 []` distinction was added, first to this action and then to
   `GetAll` too.
