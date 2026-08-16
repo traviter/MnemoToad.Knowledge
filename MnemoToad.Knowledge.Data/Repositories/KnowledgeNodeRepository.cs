@@ -11,11 +11,25 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
 {
     private readonly IAppDbContext _db;
     private readonly IEntityJsonMapper<KnowledgeNodeMedia> _mediaMapper;
+    private readonly EntityCollectionSynchronizer<KnowledgeNodeAttribute, JsonValue> _attributeSync;
+    private readonly EntityCollectionSynchronizer<KnowledgeNodeMedia, JsonObject> _mediaSync;
 
     public KnowledgeNodeRepository(IAppDbContext db, IEntityJsonMapper<KnowledgeNodeMedia> mediaMapper)
     {
         _db = db;
         _mediaMapper = mediaMapper;
+
+        _attributeSync = new EntityCollectionSynchronizer<KnowledgeNodeAttribute, JsonValue>(
+            dbSet: _db.KnowledgeNodeAttribute,
+            keySelector: a => a.Key,
+            createBlank: (knowledgeNodeId, key) => new KnowledgeNodeAttribute { KnowledgeNodeId = knowledgeNodeId, Key = key },
+            applyValue: (attribute, value) => attribute.Value = value);
+
+        _mediaSync = new EntityCollectionSynchronizer<KnowledgeNodeMedia, JsonObject>(
+            dbSet: _db.KnowledgeNodeMedia,
+            keySelector: m => m.Key,
+            createBlank: (knowledgeNodeId, key) => new KnowledgeNodeMedia { KnowledgeNodeId = knowledgeNodeId, Key = key },
+            applyValue: (media, stanza) => _mediaMapper.UpdateFromJson(stanza, media));
     }
 
     public Task<List<KnowledgeNode>> GetAllAsync(Guid nodeTypeId) =>
@@ -38,23 +52,11 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
         knowledgeNode.Media ??= new();
         _db.KnowledgeNode.Add(knowledgeNode);
 
-        foreach (var (key, value) in knowledgeNode.Attributes)
-        {
-            _db.KnowledgeNodeAttribute.Add(new KnowledgeNodeAttribute
-            {
-                KnowledgeNodeId = knowledgeNode.Id,
-                Key = key,
-                Value = value
-            });
-        }
-
-        foreach (var (key, stanza) in knowledgeNode.Media)
-        {
-            _db.KnowledgeNodeMedia.Add(BuildMedia(knowledgeNode.Id, key, stanza));
-        }
+        _attributeSync.Sync(knowledgeNode.Id, knowledgeNode.Attributes, new ());
+        var syncedMedia = _mediaSync.Sync(knowledgeNode.Id, knowledgeNode.Media, new ());
 
         await SaveChangesAsync();
-        knowledgeNode.Media = await GetMediaAsync(knowledgeNode.Id);
+        knowledgeNode.Media = ToDictionary(syncedMedia);
         return knowledgeNode;
     }
 
@@ -70,62 +72,23 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
         existing.Description = knowledgeNode.Description;
 
         var currentRows = await _db.KnowledgeNodeAttribute.Where(a => a.KnowledgeNodeId == existing.Id).ToListAsync();
-
-        foreach (var row in currentRows.Where(r => !knowledgeNode.Attributes.ContainsKey(r.Key)))
-            _db.KnowledgeNodeAttribute.Remove(row);
-
-        foreach (var (key, value) in knowledgeNode.Attributes)
-        {
-            var existingRow = currentRows.FirstOrDefault(r => r.Key == key);
-            if (existingRow is not null)
-                existingRow.Value = value;
-            else
-                _db.KnowledgeNodeAttribute.Add(new KnowledgeNodeAttribute { KnowledgeNodeId = existing.Id, Key = key, Value = value });
-        }
+        _attributeSync.Sync(existing.Id, knowledgeNode.Attributes, currentRows);
 
         var currentMediaRows = await _db.KnowledgeNodeMedia.Where(m => m.KnowledgeNodeId == existing.Id).ToListAsync();
-
-        foreach (var row in currentMediaRows.Where(r => !knowledgeNode.Media.ContainsKey(r.Key)))
-            _db.KnowledgeNodeMedia.Remove(row);
-
-        foreach (var (key, stanza) in knowledgeNode.Media)
-        {
-            var existingRow = currentMediaRows.FirstOrDefault(r => r.Key == key);
-            if (existingRow is not null)
-                UpdateMedia(key, stanza, existingRow);
-            else
-                _db.KnowledgeNodeMedia.Add(BuildMedia(existing.Id, key, stanza));
-        }
+        var syncedMedia = _mediaSync.Sync(existing.Id, knowledgeNode.Media, currentMediaRows);
 
         await SaveChangesAsync();
         existing.Attributes = knowledgeNode.Attributes;
-        existing.Media = await GetMediaAsync(existing.Id);
+        existing.Media = ToDictionary(syncedMedia);
         return existing;
     }
+
+    private Dictionary<string, JsonObject> ToDictionary(List<KnowledgeNodeMedia> media) => media.ToDictionary(r => r.Key, r => _mediaMapper.ToJson(r));
 
     private async Task<Dictionary<string, JsonObject>> GetMediaAsync(Guid knowledgeNodeId)
     {
         var rows = await _db.KnowledgeNodeMedia.Where(m => m.KnowledgeNodeId == knowledgeNodeId).ToListAsync();
-        return rows.ToDictionary(r => r.Key, r => _mediaMapper.ToJson(r));
-    }
-
-    private KnowledgeNodeMedia BuildMedia(Guid knowledgeNodeId, string key, JsonObject stanza)
-    {
-        var media = new KnowledgeNodeMedia { KnowledgeNodeId = knowledgeNodeId, Key = key };
-        UpdateMedia(key, stanza, media);
-        return media;
-    }
-
-    private void UpdateMedia(string key, JsonObject stanza, KnowledgeNodeMedia existing)
-    {
-        try
-        {
-            _mediaMapper.UpdateFromJson(stanza, existing);
-        }
-        catch (ValidationException ex)
-        {
-            throw new ValidationException($"The media entry '{key}' {ex.Message}");
-        }
+        return ToDictionary(rows);
     }
 
     public async Task<bool> DeleteAsync(Guid id)

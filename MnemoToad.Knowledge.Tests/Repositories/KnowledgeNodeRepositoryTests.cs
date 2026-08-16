@@ -182,10 +182,10 @@ public class KnowledgeNodeRepositoryTests
     }
 
     [Test]
-    public void CreateAsync_WhenMapperThrowsValidationException_WrapsMessageWithMediaKey()
+    public void CreateAsync_WhenMapperThrowsValidationException_PropagatesItUnchanged()
     {
         var stanza = new JsonObject();
-        _mediaMapper.Setup(m => m.UpdateFromJson(stanza, It.IsAny<KnowledgeNodeMedia>())).Throws(new ValidationException("must include a valid 'id'."));
+        _mediaMapper.Setup(m => m.UpdateFromJson(stanza, It.IsAny<KnowledgeNodeMedia>())).Throws(new ValidationException("The media entry 'flag' must include a valid 'id'."));
         var knowledgeNode = new KnowledgeNode
         {
             Id = Guid.NewGuid(),
@@ -294,7 +294,7 @@ public class KnowledgeNodeRepositoryTests
     }
 
     [Test]
-    public async Task UpdateAsync_WhenMapperThrowsValidationExceptionOnExistingKey_WrapsMessageWithMediaKey()
+    public async Task UpdateAsync_WhenMapperThrowsValidationExceptionOnExistingKey_PropagatesItUnchanged()
     {
         var nodeTypeId = Guid.NewGuid();
         var knowledgeNode = new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "France" };
@@ -305,7 +305,7 @@ public class KnowledgeNodeRepositoryTests
         await _db.SaveChangesAsync();
 
         var invalidStanza = new JsonObject();
-        _mediaMapper.Setup(m => m.UpdateFromJson(invalidStanza, It.IsAny<KnowledgeNodeMedia>())).Throws(new ValidationException("must include a valid 'id'."));
+        _mediaMapper.Setup(m => m.UpdateFromJson(invalidStanza, It.IsAny<KnowledgeNodeMedia>())).Throws(new ValidationException("The media entry 'flag' must include a valid 'id'."));
 
         var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.UpdateAsync(new KnowledgeNode
         {

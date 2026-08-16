@@ -108,7 +108,7 @@ public class KnowledgeNodeMediaJsonMapperTests
 
         var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(invalidStanza, media));
 
-        Assert.That(ex!.Message, Is.EqualTo("must include a valid 'id'."));
+        Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'id'."));
         Assert.That(media.MediaAssetId, Is.EqualTo(originalMediaAssetId));
         Assert.That(media.AltText, Is.EqualTo("Old text"));
     }
@@ -120,7 +120,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var stanza = new JsonObject { ["id"] = "not-a-guid", ["alt_text"] = "A flag" };
 
         var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza, media));
-        Assert.That(ex!.Message, Is.EqualTo("must include a valid 'id'."));
+        Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'id'."));
     }
 
     [Test]
@@ -130,7 +130,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var stanza = new JsonObject { ["id"] = Guid.NewGuid().ToString() };
 
         var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza, media));
-        Assert.That(ex!.Message, Is.EqualTo("must include a valid 'alt_text'."));
+        Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'alt_text'."));
     }
 
     [Test]
@@ -140,7 +140,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var stanza = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = 123 };
 
         var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza, media));
-        Assert.That(ex!.Message, Is.EqualTo("must include a valid 'alt_text'."));
+        Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'alt_text'."));
     }
 
     [Test]
@@ -150,6 +150,6 @@ public class KnowledgeNodeMediaJsonMapperTests
         JsonObject? stanza = null;
 
         var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza!, media));
-        Assert.That(ex!.Message, Is.EqualTo("must include a valid 'id'."));
+        Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'id'."));
     }
 }

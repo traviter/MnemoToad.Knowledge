@@ -659,10 +659,7 @@
     `UpdateFromJson` to populate the JSON-derived fields — a single method that works identically for
     both a brand-new entity and an existing tracked one, since "update fields on an entity" is right
     either way; there's no meaningful difference between "just-constructed" and "loaded from the DB"
-    from the mapper's point of view. `KnowledgeNodeRepository.BuildMedia` is now
-    `new KnowledgeNodeMedia { KnowledgeNodeId = ..., Key = key }` followed by a call to the same
-    `UpdateMedia` helper `UpdateAsync`'s existing-row path already used, rather than a separate
-    `FromJson`-based code path. This also supersedes the version before that, which put the
+    from the mapper's point of view. This also supersedes the version before that, which put the
     translation in `JsonObject`-extension methods (`ToKnowledgeNodeMedia`/`UpdateFrom`) — reversed
     because extending `JsonObject` itself (a BCL type with no relation to this domain) was the wrong
     owner for "how do I become a `KnowledgeNodeMedia`" logic.
@@ -670,28 +667,87 @@
     `alt_text` (required — "Accessibility is a requirement," validated identically to `id`, not
     treated as optional) out into the passed entity's `MediaAssetId`/`AltText`, with `Metadata`
     assigned the whole incoming `JsonObject` as-is, redundancy and all. **The mapper's own
-    `ValidationException` messages omit the media key** (`"must include a valid 'id'."` /
-    `"...'alt_text'."`) — `UpdateFromJson` has no way to know which dictionary key it's being called
-    for (the interface only passes the `JsonObject` and the entity, and a freshly-constructed
-    entity's `Key` is set by the caller for persistence, not read back by the mapper), so
-    `KnowledgeNodeRepository`'s private `UpdateMedia` wrapper catches that exception and re-throws
-    with the key prepended (`"The media entry '{key}' " + ex.Message`), reconstructing the exact same
-    wire-visible message (`"The media entry '{key}' must include a valid 'id'."`) API consumers and
-    Karate already expect; `BuildMedia` inherits this for free since it delegates to `UpdateMedia`.
-    `GetMediaAsync` (a `GET` response for that key) reads `metadata` back through
+    `ValidationException` messages include the media key** (`"The media entry '{entity.Key}' must
+    include a valid 'id'."` / `"...'alt_text'."`), read directly off the entity's own `Key` property
+    rather than taking it as a separate parameter — safe because by the time `UpdateFromJson` runs,
+    `Key` is always already set, whether the entity is an existing tracked row (loaded with its real
+    `Key` from the DB) or a brand-new one (the caller sets `Key` before calling `UpdateFromJson`, same
+    as `KnowledgeNodeId`). This reverses an earlier version where the mapper's messages omitted the
+    key (`"must include a valid 'id'."`) and `KnowledgeNodeRepository` caught the bare exception and
+    re-threw it with the key prepended — reversed once it was noticed the entity already carries
+    everything needed to build the full message itself, so the repository doesn't need to know
+    anything about the mapper's error text at all; it just lets `ValidationException` propagate
+    unchanged. `GetMediaAsync` (a `GET` response for that key) reads `metadata` back through
     `_mediaMapper.ToJson(row)`, which overrides `id`/`alt_text` from the two extracted columns rather
     than trusting them to already be reconstructed purely from `Metadata` — a no-op in practice,
     since both are already in sync at write time, but a guardrail against them ever silently
-    drifting. `ValidationException` escaping `BuildMedia`/`UpdateMedia` is caught by the controller's
-    existing `ValidationException → 400` pattern, same as every other repository-level validation
-    failure — even though this specific check isn't a DB constraint translation (nothing for
-    Postgres to catch here; the row can't even be built yet), it still belongs in the repository,
-    consistent with "repository owns write-time translation, no service layer." `KnowledgeNodeRepository`
-    takes `IEntityJsonMapper<KnowledgeNodeMedia>` as a constructor dependency (registered in
-    `ServiceCollectionExtensions.cs`), and `TerminalResolverFactory` constructs a bare
-    `new KnowledgeNodeMediaJsonMapper()` directly for `MediaTerminalResolver`, same "build
-    collaborators itself, no DI" pattern as its other resolvers (see the `ITerminalResolverFactory`
-    bullet below).
+    drifting. `ValidationException` escaping the mapper is caught by the controller's existing
+    `ValidationException → 400` pattern, same as every other repository-level validation failure —
+    even though this specific check isn't a DB constraint translation (nothing for Postgres to catch
+    here; the row can't even be built yet), it still belongs behind the same repository→controller
+    boundary, consistent with "repository owns write-time translation, no service layer."
+    `KnowledgeNodeRepository` takes `IEntityJsonMapper<KnowledgeNodeMedia>` as a constructor
+    dependency (registered in `ServiceCollectionExtensions.cs`), and `TerminalResolverFactory`
+    constructs a bare `new KnowledgeNodeMediaJsonMapper()` directly for `MediaTerminalResolver`, same
+    "build collaborators itself, no DI" pattern as its other resolvers (see the
+    `ITerminalResolverFactory` bullet below).
+  - **`EntityCollectionSynchronizer<TEntity, TValue>`** (`MnemoToad.Knowledge.Data/Common/
+    EntityCollectionSynchronizer.cs`) is the generalized create/update/remove diff both
+    `KnowledgeNode.Attributes` and `KnowledgeNode.Media` need — desired `Dictionary<string, TValue>`
+    vs. a `List<TEntity>` of current DB rows, keyed by `.Key`: rows whose key is no longer in the
+    desired dictionary are removed; every desired key either mutates its matching existing row or
+    gets a newly-`createBlank`'d one added, via an injected `applyValue` delegate either way.
+    **Takes a `DbSet<TEntity>` in its constructor and calls `RemoveRange`/`AddRange` on it directly
+    inside `Sync`** — `Sync(Guid parentId, IReadOnlyDictionary<string, TValue> desired,
+    List<TEntity> currentRows) -> List<TEntity>` returns just the fully-synced result set (the same
+    mutated-in-place instances for keys that already existed, plus the newly-`createBlank`'d ones for
+    keys that didn't), with the add/remove staging already applied to the `DbSet` as a side effect —
+    callers don't see `ToAdd`/`ToRemove` at all anymore. This reverses an earlier version that
+    returned `(ToRemove, ToAdd, Result)` and left the repository to call `_db.Xxx.AddRange(ToAdd)`/
+    `RemoveRange(ToRemove)` itself — collapsed once it was clear every caller was going to do exactly
+    that immediately after calling `Sync`, so there was no reason to hand the lists back out instead
+    of just staging them. **This does mean `EntityCollectionSynchronizer` is no longer
+    persistence-technology-agnostic — it depends on `Microsoft.EntityFrameworkCore` directly now**,
+    unlike `IEntityJsonMapper<TEntity>`/`Result<T>`/`Error`, which stay pure C# with no framework
+    dependency. Still lives in `Common/` alongside them despite that: this is `MnemoToad.Knowledge.Data`,
+    where `IAppDbContext` already exposes `DbSet<T>` directly rather than hiding EF Core behind a
+    further abstraction (see "API patterns" above), so a `Common/` helper depending on `DbSet<T>`
+    isn't introducing a new level of coupling this project doesn't already have elsewhere — it's
+    "generic across entities," not "generic across persistence technology," and that's the only
+    genericity this codebase was ever after.
+    **`applyValue` is `Action<TEntity, TValue>` — no `key` parameter.** An earlier version passed
+    `(key, value, entity)`, added back when `KnowledgeNodeRepository` still needed the key itself to
+    wrap the mapper's `ValidationException` message (see the `MediaAsset`/`KnowledgeNodeMedia` bullet
+    above); once that wrapping moved into `KnowledgeNodeMediaJsonMapper` (deriving the key straight
+    off `entity.Key`, which is always already set by the time `applyValue` runs), nothing configured
+    on either `EntityCollectionSynchronizer` instance needed `key` anymore, so the parameter was
+    dropped rather than left unused.
+    `KnowledgeNodeRepository` configures two instances in its constructor, passing `_db.KnowledgeNodeAttribute`/
+    `_db.KnowledgeNodeMedia` as the `dbSet`: `_attributeSync`
+    (`EntityCollectionSynchronizer<KnowledgeNodeAttribute, JsonValue>`, `applyValue` is a bare
+    `attribute.Value = value` — no extraction/validation step exists for a scalar `JsonValue`) and
+    `_mediaSync` (`EntityCollectionSynchronizer<KnowledgeNodeMedia, JsonObject>`, `applyValue`
+    delegates straight to `_mediaMapper.UpdateFromJson`). Both `CreateAsync` and `UpdateAsync` call
+    the same `.Sync(...)` for a given collection — `CreateAsync` passes an empty `List<TEntity>` as
+    `currentRows` (a brand-new node has no existing rows), which collapses what were previously two
+    separate create-only loops into the exact same code path `UpdateAsync` uses, just with nothing to
+    remove and nothing to match against for updates. This superseded an earlier version with
+    dedicated `BuildMedia`/`UpdateMedia` (and, briefly, `BuildAttribute`/`UpdateAttribute`) private
+    methods hand-rolling this same remove/update/add loop once per collection — extracted once it was
+    clear the merge strategy itself (not just the per-item build/update logic) was identical between
+    Attributes and Media and would apply to any future `KnowledgeNode`-owned keyed collection.
+    **`CreateAsync`/`UpdateAsync` build the returned `Media` dictionary from `Sync`'s result directly,
+    via a shared private `ToDictionary(List<KnowledgeNodeMedia> media)` helper
+    (`media.ToDictionary(r => r.Key, r => _mediaMapper.ToJson(r))`), not by re-querying the DB.** An
+    earlier version called `GetMediaAsync` (a fresh `_db.KnowledgeNodeMedia.Where(...).ToListAsync()`)
+    after `SaveChangesAsync()` — a redundant round trip, since `Sync`'s returned list already holds
+    the exact entity instances that were just persisted, with the exact `MediaAssetId`/`AltText`/
+    `Metadata` values that `SaveChangesAsync()` wrote (this table has no DB-populated columns — no
+    `CreatedUtc`/`ModifiedUtc`, no server-side defaults — so nothing about a row's field values
+    changes as a side effect of the save itself; re-fetching couldn't have produced a different
+    answer). `GetMediaAsync` (`GetByIdAsync`'s genuine fresh-read path, with no in-memory rows to
+    reuse) now just calls the same `ToDictionary` helper on its freshly-queried rows, rather than
+    duplicating the `.ToDictionary(r => r.Key, r => _mediaMapper.ToJson(r))` projection a third time.
   - **Extracting `id` reads it as a string first, then `Guid.TryParse`s it — deliberately not
     `JsonValue.TryGetValue<Guid>()` directly.** `System.Text.Json.Nodes.JsonValue.TryGetValue<T>()`
     only performs real conversion (e.g. GUID-formatted-string → `Guid`) when the node is backed by a
@@ -962,9 +1018,10 @@
     `KnowledgeNodeId`/`Key` already set and calls `UpdateFromJson` on it (verified via a Moq
     `Callback` mutating the entity, since `UpdateFromJson` is `void`), `UpdateAsync` calls the same
     for both an existing row and a newly-added one, `GetByIdAsync` keys its result dictionary by
-    `ToJson`'s return value, and a `ValidationException` thrown by the mapper is re-thrown with the
-    media key prepended (see the `MediaAsset`/`KnowledgeNodeMedia` bullet above).
-    `Components/KnowledgeNodeRepositoryTests.cs` wires a real `KnowledgeNodeMediaJsonMapper()`
+    `ToJson`'s return value, and a `ValidationException` thrown by the mapper propagates out of the
+    repository unchanged (the repository no longer touches the message at all — see the
+    `MediaAsset`/`KnowledgeNodeMedia` bullet above for why that wrapping moved into the mapper
+    itself). `Components/KnowledgeNodeRepositoryTests.cs` wires a real `KnowledgeNodeMediaJsonMapper()`
     alongside the same `MockableAppDbContext`, covering genuine end-to-end behavior the mocked
     version can't (verbatim extra-field storage, real `id`/`alt_text` extraction, a real validation
     failure's exact wire-visible message) — mirroring why `PathResolutionRepositoryTests` exists in
@@ -974,9 +1031,10 @@
     `KnowledgeNodeMediaJsonMapperTests` (pure mapper logic, no DB, no repository involved), one
     representative case each for "missing id" / "missing alt_text" moved to the Components version
     to confirm the real end-to-end message, and the Repositories version keeps a single test
-    asserting only the repository's own message-wrapping behavior (a mocked mapper throwing a bare
-    `ValidationException` gets the key prepended) — deliberately not re-asserting extraction rules a
-    mocked mapper can't exercise anyway.
+    confirming the repository doesn't swallow or alter an exception the mapper throws (a mocked
+    mapper throwing the full `"The media entry '...'"` message surfaces from `CreateAsync`/
+    `UpdateAsync` byte-for-byte) — deliberately not re-asserting extraction rules a mocked mapper
+    can't exercise anyway.
   - **System tests** (`MnemoToad.Knowledge.Tests/SystemTests/`) send real HTTP requests through the full app
     pipeline via `WebApplicationFactory<Program>` — see below.
 - `[SetUp]` creates a fresh mock/context/factory per test (not shared/static state), so tests can't

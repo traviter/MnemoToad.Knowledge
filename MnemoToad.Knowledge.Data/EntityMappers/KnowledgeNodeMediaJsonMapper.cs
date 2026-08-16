@@ -17,13 +17,13 @@ public class KnowledgeNodeMediaJsonMapper : IEntityJsonMapper<KnowledgeNodeMedia
 
     public void UpdateFromJson(JsonObject json, KnowledgeNodeMedia entity)
     {
-        var (mediaAssetId, altText) = ExtractMediaFields(json);
+        var (mediaAssetId, altText) = ExtractMediaFields(entity.Key, json);
         entity.MediaAssetId = mediaAssetId;
         entity.AltText = altText;
         entity.Metadata = json;
     }
 
-    private static (Guid MediaAssetId, string AltText) ExtractMediaFields(JsonObject? stanza)
+    private static (Guid MediaAssetId, string AltText) ExtractMediaFields(string key, JsonObject? stanza)
     {
         if (stanza is null
             || !stanza.TryGetPropertyValue("id", out var idNode)
@@ -31,14 +31,14 @@ public class KnowledgeNodeMediaJsonMapper : IEntityJsonMapper<KnowledgeNodeMedia
             || !idValue.TryGetValue<string>(out var idString)
             || !Guid.TryParse(idString, out var mediaAssetId))
         {
-            throw new ValidationException("must include a valid 'id'.");
+            throw new ValidationException($"The media entry '{key}' must include a valid 'id'.");
         }
 
         if (!stanza.TryGetPropertyValue("alt_text", out var altNode)
             || altNode is not JsonValue altValue
             || !altValue.TryGetValue<string>(out var altText))
         {
-            throw new ValidationException("must include a valid 'alt_text'.");
+            throw new ValidationException($"The media entry '{key}' must include a valid 'alt_text'.");
         }
 
         return (mediaAssetId, altText);
