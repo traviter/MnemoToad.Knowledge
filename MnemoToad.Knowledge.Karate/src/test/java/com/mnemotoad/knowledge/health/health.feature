@@ -6,4 +6,4 @@
       And path 'health'
       When method get
       Then status 200
-      And match response == {status: "pass"}
+      And match response == { status: "Healthy", checks: [{ name: "database", status: "Healthy", description: "#ignore" }] }

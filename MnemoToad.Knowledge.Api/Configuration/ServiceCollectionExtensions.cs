@@ -36,6 +36,9 @@ public static class ServiceCollectionExtensions
             options.UseNpgsql(configuration.GetConnectionString("Default")).UseSnakeCaseNamingConvention());
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
+        services.AddHealthChecks()
+            .AddNpgSql(configuration.GetConnectionString("Default")!, name: "database");
+
         services.AddScoped<IEntityJsonMapper<KnowledgeNodeMedia>, KnowledgeNodeMediaJsonMapper>();
 
         services.AddScoped<INodeTypeRepository, NodeTypeRepository>();

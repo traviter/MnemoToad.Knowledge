@@ -10,8 +10,18 @@
 ## Solution layout
 - `MnemoToad.Knowledge.Api` — ASP.NET Core Web API, .NET 10 (LTS), controllers (refactored off minimal APIs).
   `Program.cs` has no route mappings left — every endpoint, including `/health`, is a controller.
-  `/health` is a controller (not minimal-API) because it's expected to grow (DB connectivity checks,
-  etc.), not stay a static response.
+  `HealthController` injects the framework's `HealthCheckService` (registered via `AddHealthChecks()`
+  + `AddNpgSql(...)` in `ServiceCollectionExtensions.cs`, from the `AspNetCore.HealthChecks.NpgSql`
+  package) rather than the endpoint being mapped via `app.MapHealthChecks(...)` — deliberate, to keep
+  the "no route mappings in `Program.cs`" invariant above. Response is `{ status, checks: [{ name,
+  status, description }] }`, `status` values being the `HealthStatus` enum names (`Healthy`/
+  `Degraded`/`Unhealthy`) via `.ToString()`; HTTP status is 503 only when `Unhealthy`, 200 for
+  `Healthy`/`Degraded` (matches the framework's own default `HealthCheckOptions.ResultStatusCodes`
+  mapping). Only one check exists today (`"database"`, a `SELECT`-based Postgres connectivity probe) —
+  this service has no other external dependency (no queues, caches, other services, background
+  workers). A latency-based `Degraded` status and a schema/migration-drift check (comparing the DB
+  schema version DbMigrator last applied against what the app build expects) were both considered and
+  deliberately deferred, not overlooked, when DB-down was added as the first real check.
 - `MnemoToad.Knowledge.Data` — class library: entities (under `Entities/`), `AppDbContext` (which implements
   `IAppDbContext` — see "API patterns" below), and repositories (under `Repositories/`, e.g.
   `INodeTypeRepository`/`NodeTypeRepository`) that wrap `IAppDbContext` behind an interface. Holds
