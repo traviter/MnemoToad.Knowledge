@@ -74,46 +74,32 @@ public class KnowledgeNodesControllerResolveSystemTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Test]
-    public async Task ResolveByType_ReturnsExpectedProperties()
+    private static readonly string[] ResolveByTypeSuccessCases =
+    [
+        "resolve-by-type", "resolve-by-type-multi-hop", "resolve-by-type-partial-results", "resolve-by-type-empty-type"
+    ];
+
+    [TestCaseSource(nameof(ResolveByTypeSuccessCases))]
+    public async Task ResolveByType_ReturnsExpectedProperties(string caseName)
     {
-        var testCase = ReadCase("resolve-by-type");
+        var testCase = ReadCase(caseName);
         var response = await _client.PostAsync("/nodes/resolve/type",
             new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var actual = JsonNode.Parse(await response.Content.ReadAsStringAsync());
         var expected = testCase["response"];
-        Assert.That(JsonNode.DeepEquals(actual, expected), Is.True,
+        // GetAllAsync no longer orders its results, so compare by nodeId regardless of array order.
+        Assert.That(JsonNode.DeepEquals(SortByNodeId(actual), SortByNodeId(expected)), Is.True,
             $"Expected:\n{expected}\nActual:\n{actual}");
     }
 
-    [Test]
-    public async Task ResolveByType_MultiHopEdgePath_ReturnsExpectedProperties()
+    private static JsonNode SortByNodeId(JsonNode? node)
     {
-        var testCase = ReadCase("resolve-by-type-multi-hop");
-        var response = await _client.PostAsync("/nodes/resolve/type",
-            new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
-
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var actual = JsonNode.Parse(await response.Content.ReadAsStringAsync());
-        var expected = testCase["response"];
-        Assert.That(JsonNode.DeepEquals(actual, expected), Is.True,
-            $"Expected:\n{expected}\nActual:\n{actual}");
-    }
-
-    [Test]
-    public async Task ResolveByType_SomeNodesResolveAndSomeError_ReturnsBothInOneResponse()
-    {
-        var testCase = ReadCase("resolve-by-type-partial-results");
-        var response = await _client.PostAsync("/nodes/resolve/type",
-            new StringContent(testCase["request"]!.ToJsonString(), Encoding.UTF8, "application/json"));
-
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var actual = JsonNode.Parse(await response.Content.ReadAsStringAsync());
-        var expected = testCase["response"];
-        Assert.That(JsonNode.DeepEquals(actual, expected), Is.True,
-            $"Expected:\n{expected}\nActual:\n{actual}");
+        var sorted = new JsonArray();
+        foreach (var item in node!.AsArray().OrderBy(item => item!["nodeId"]!.GetValue<string>()))
+            sorted.Add(item!.DeepClone());
+        return sorted;
     }
 
     [Test]

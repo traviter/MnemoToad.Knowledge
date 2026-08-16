@@ -33,29 +33,32 @@ public class KnowledgeNodeRepositoryTests
         new() { ["id"] = mediaAssetId.ToString(), ["alt_text"] = altText };
 
     [Test]
-    public async Task GetAllAsync_ReturnsKnowledgeNodesOrderedByCanonicalName()
+    public async Task GetAllAsync_ReturnsAllKnowledgeNodesOfThatNodeType()
     {
-        var nodeTypeId = Guid.NewGuid();
+        var nodeType = new NodeType { Id = Guid.NewGuid(), Name = "Planet" };
+        await _db.NodeType.AddAsync(nodeType);
         await _db.KnowledgeNode.AddRangeAsync(
-            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "Venus" },
-            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "Mercury" });
+            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeType.Id, CanonicalName = "Venus" },
+            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeType.Id, CanonicalName = "Mercury" });
         await _db.SaveChangesAsync();
 
-        var all = await _repository.GetAllAsync(nodeTypeId);
+        var all = await _repository.GetAllAsync(nodeType.Name);
 
-        Assert.That(all.Select(n => n.CanonicalName), Is.EqualTo(new[] { "Mercury", "Venus" }));
+        Assert.That(all.Select(n => n.CanonicalName), Is.EquivalentTo(new[] { "Mercury", "Venus" }));
     }
 
     [Test]
-    public async Task GetAllAsync_WithNodeTypeIdFilter_ReturnsOnlyMatchingNodes()
+    public async Task GetAllAsync_WithNodeTypeNameFilter_ReturnsOnlyMatchingNodes()
     {
-        var nodeTypeId = Guid.NewGuid();
+        var nodeType1 = new NodeType { Id = Guid.NewGuid(), Name = "Planet" };
+        var nodeType2 = new NodeType { Id = Guid.NewGuid(), Name = "Moon" };
+        await _db.NodeType.AddRangeAsync(nodeType1, nodeType2);
         await _db.KnowledgeNode.AddRangeAsync(
-            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "Mercury" },
-            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = Guid.NewGuid(), CanonicalName = "Venus" });
+            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeType1.Id, CanonicalName = "Mercury" },
+            new KnowledgeNode { Id = Guid.NewGuid(), NodeTypeId = nodeType2.Id, CanonicalName = "Moon" });
         await _db.SaveChangesAsync();
 
-        var all = await _repository.GetAllAsync(nodeTypeId);
+        var all = await _repository.GetAllAsync(nodeType1.Name);
 
         Assert.That(all.Select(n => n.CanonicalName), Is.EqualTo(new[] { "Mercury" }));
     }

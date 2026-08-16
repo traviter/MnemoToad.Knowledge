@@ -34,14 +34,16 @@ public class KnowledgeNodesController : ControllerBase
     /// Lists every KnowledgeNode of a given NodeType. List items omit <c>attributes</c>/<c>media</c>
     /// entirely — use <c>GET /nodes/{id}</c> for a node's full attributes and media.
     /// </summary>
-    /// <param name="nodeTypeId">The NodeType to filter by. Required — there is no unfiltered "list every node" call.</param>
-    /// <response code="200">The matching KnowledgeNodes, in no particular order.</response>
-    /// <response code="400"><c>nodeTypeId</c> was missing or not a valid GUID.</response>
+    /// <param name="nodeTypeName">The NodeType's name to filter by. Required — there is no unfiltered "list every node" call.</param>
+    /// <response code="200">The matching KnowledgeNodes, in no particular order. Empty array if the NodeType has no KnowledgeNodes.</response>
+    /// <response code="400"><c>nodeTypeName</c> was missing or empty.</response>
+    /// <response code="404">No NodeType exists with that name.</response>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<KnowledgeNode>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetAll([FromQuery, Required] Guid? nodeTypeId) =>
-        Ok(await _repository.GetAllAsync(nodeTypeId!.Value));
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAll([FromQuery, Required] string? nodeTypeName) =>
+        await NodeTypeExistsAsync(nodeTypeName!) ? Ok(await _repository.GetAllAsync(nodeTypeName!)) : NotFound();
 
     /// <summary>Gets a single KnowledgeNode by id, including its full attributes and media.</summary>
     /// <param name="id">The KnowledgeNode's id.</param>
@@ -153,13 +155,13 @@ public class KnowledgeNodesController : ControllerBase
 
     /// <summary>
     /// Finds every KnowledgeNode of the named NodeType and resolves the same set of Property Path
-    /// DSL expressions against each — equivalent to calling <c>GET /nodes?nodeTypeId=...</c> then
+    /// DSL expressions against each — equivalent to calling <c>GET /nodes?nodeTypeName=...</c> then
     /// feeding every returned node id, paired with the same paths, into <c>POST /nodes/resolve</c>.
     /// </summary>
     /// <param name="request">The NodeType name and the paths to resolve against each of its nodes.</param>
     /// <response code="200">
     /// One result per matching KnowledgeNode, same shape as <c>POST /nodes/resolve</c>. Empty array
-    /// if no KnowledgeNode has that NodeType.
+    /// if the NodeType exists but has no KnowledgeNodes.
     /// </response>
     /// <response code="400">
     /// <c>nodeTypeName</c> or <c>paths</c> was missing/empty, or a path isn't valid Path DSL syntax.
@@ -171,13 +173,15 @@ public class KnowledgeNodesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ResolveByType(ResolveByNodeTypeRequest request)
     {
-        var nodeType = await _nodeTypeRepository.GetByNameAsync(request.NodeTypeName!);
-        if (nodeType is null) return NotFound();
+        if (!await NodeTypeExistsAsync(request.NodeTypeName!)) return NotFound();
 
-        var nodes = await _repository.GetAllAsync(nodeType.Id);
+        var nodes = await _repository.GetAllAsync(request.NodeTypeName!);
         var items = nodes.Select(n => new ResolvePathsRequestItem(n.Id, request.Paths)).ToList();
         return Ok(await ResolveItemsAsync(items));
     }
+
+    private async Task<bool> NodeTypeExistsAsync(string nodeTypeName) =>
+        (await _nodeTypeRepository.GetAllAsync()).Any(nt => nt.Name == nodeTypeName);
 
     private async Task<List<ResolvedNodePaths>> ResolveItemsAsync(List<ResolvePathsRequestItem> items)
     {

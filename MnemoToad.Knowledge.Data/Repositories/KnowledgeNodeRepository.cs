@@ -32,8 +32,11 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
             applyValue: _mediaMapper.UpdateFromJson);
     }
 
-    public Task<List<KnowledgeNode>> GetAllAsync(Guid nodeTypeId) =>
-        _db.KnowledgeNode.Where(n => n.NodeTypeId == nodeTypeId).OrderBy(n => n.CanonicalName).ToListAsync();
+    public Task<List<KnowledgeNode>> GetAllAsync(string nodeTypeName) =>
+        (from n in _db.KnowledgeNode
+         join nt in _db.NodeType on n.NodeTypeId equals nt.Id
+         where nt.Name == nodeTypeName
+         select n).ToListAsync();
 
     public async Task<KnowledgeNode?> GetByIdAsync(Guid id)
     {

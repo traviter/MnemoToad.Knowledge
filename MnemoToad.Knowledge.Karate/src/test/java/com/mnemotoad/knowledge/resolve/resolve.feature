@@ -51,13 +51,14 @@ Feature: Resolve Property Path DSL expressions against KnowledgeNodes
     And request testCase.request
     When method post
     Then status 200
-    And match response == testCase.response
+    And match response contains only testCase.response
 
     Examples:
       | case                              |
       | resolve-by-type                   |
       | resolve-by-type-multi-hop         |
       | resolve-by-type-partial-results   |
+      | resolve-by-type-empty-type        |
 
   Scenario: Resolve by type with an unknown NodeType name returns 404
     * def testCase = read('cases/resolve-by-type-unknown-name.json')

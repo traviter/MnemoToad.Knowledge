@@ -29,18 +29,29 @@ public class KnowledgeNodesControllerTests
     }
 
     [Test]
-    public async Task GetAll_WithNodeTypeIdFilter_PassesFilterToRepository()
+    public async Task GetAll_WithNodeTypeNameFilter_PassesFilterToRepository()
     {
-        var nodeTypeId = Guid.NewGuid();
         var nodes = new List<KnowledgeNode>();
-        _repository.Setup(r => r.GetAllAsync(nodeTypeId)).ReturnsAsync(nodes);
+        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType> { new() { Id = Guid.NewGuid(), Name = "Country" } });
+        _repository.Setup(r => r.GetAllAsync("Country")).ReturnsAsync(nodes);
 
-        var result = await _controller.GetAll(nodeTypeId);
+        var result = await _controller.GetAll("Country");
 
         var ok = result as OkObjectResult;
         Assert.That(ok, Is.Not.Null);
         Assert.That(ok!.Value, Is.SameAs(nodes));
-        _repository.Verify(r => r.GetAllAsync(nodeTypeId), Times.Once);
+        _repository.Verify(r => r.GetAllAsync("Country"), Times.Once);
+    }
+
+    [Test]
+    public async Task GetAll_WithUnknownNodeTypeName_ReturnsNotFound()
+    {
+        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType>());
+
+        var result = await _controller.GetAll("NoSuchType");
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        _repository.Verify(r => r.GetAllAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Test]
@@ -313,28 +324,16 @@ public class KnowledgeNodesControllerTests
     }
 
     [Test]
-    public async Task ResolveByType_UnknownNodeTypeName_ReturnsNotFound()
-    {
-        _nodeTypeRepository.Setup(r => r.GetByNameAsync("Country")).ReturnsAsync((NodeType?)null);
-
-        var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName"]));
-
-        Assert.That(result, Is.InstanceOf<NotFoundResult>());
-        _repository.Verify(r => r.GetAllAsync(It.IsAny<Guid>()), Times.Never);
-    }
-
-    [Test]
     public async Task ResolveByType_KnownNodeTypeName_ResolvesPathsForEveryMatchingNode()
     {
         var nodeTypeId = Guid.NewGuid();
-        var nodeType = new NodeType { Id = nodeTypeId, Name = "Country" };
         var nodes = new List<KnowledgeNode>
         {
             new() { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "France" },
             new() { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "Germany" },
         };
-        _nodeTypeRepository.Setup(r => r.GetByNameAsync("Country")).ReturnsAsync(nodeType);
-        _repository.Setup(r => r.GetAllAsync(nodeTypeId)).ReturnsAsync(nodes);
+        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType> { new() { Id = nodeTypeId, Name = "Country" } });
+        _repository.Setup(r => r.GetAllAsync("Country")).ReturnsAsync(nodes);
         _pathResolutionRepository.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()))
             .ReturnsAsync((IReadOnlyList<PathResolutionQuery> queries) => queries
                 .Select(q => new ResolvedPath(q.NodeId, q.Path, JsonValue.Create($"value-for-{q.Path}"), null))
@@ -352,16 +351,26 @@ public class KnowledgeNodesControllerTests
     }
 
     [Test]
-    public async Task ResolveByType_NodeTypeWithNoMatchingNodes_ReturnsEmptyList()
+    public async Task ResolveByType_KnownNodeTypeNameWithNoMatchingNodes_ReturnsEmptyList()
     {
-        var nodeTypeId = Guid.NewGuid();
-        _nodeTypeRepository.Setup(r => r.GetByNameAsync("Country")).ReturnsAsync(new NodeType { Id = nodeTypeId, Name = "Country" });
-        _repository.Setup(r => r.GetAllAsync(nodeTypeId)).ReturnsAsync(new List<KnowledgeNode>());
+        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType> { new() { Id = Guid.NewGuid(), Name = "Country" } });
+        _repository.Setup(r => r.GetAllAsync("Country")).ReturnsAsync(new List<KnowledgeNode>());
 
         var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName"]));
 
         var results = (result as OkObjectResult)!.Value as List<ResolvedNodePaths>;
         Assert.That(results, Is.Empty);
         _pathResolutionRepository.Verify(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()), Times.Once);
+    }
+
+    [Test]
+    public async Task ResolveByType_UnknownNodeTypeName_ReturnsNotFound()
+    {
+        _nodeTypeRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<NodeType>());
+
+        var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("NoSuchType", ["_canonicalName"]));
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        _repository.Verify(r => r.GetAllAsync(It.IsAny<string>()), Times.Never);
     }
 }

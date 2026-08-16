@@ -385,33 +385,63 @@
   previous bullet for how a violation surfaces as a `400`). The whole point of `KnowledgeNode` is
   still that the `Guid`, not the name, is the identity — this constraint doesn't change that, it just
   scopes "duplicate" to within a type.
-- **No separate single-column index on `knowledge_node.node_type_id`.** The composite unique
-  constraint above already creates a btree index with `node_type_id` as the leading column, which
-  Postgres can use directly for an equality lookup on `node_type_id` alone (e.g. `GET
-  /nodes?nodeTypeId=...`, the "all nodes of a type" query) — a second single-column index would just
-  be redundant write overhead. `IKnowledgeNodeRepository.GetAllAsync(Guid nodeTypeId)` takes the
-  filter directly (not a separate `GetByNodeTypeIdAsync` method) since it's the same query either
-  way.
-  - **`nodeTypeId` is a required query parameter on `GET /nodes` — an unfiltered "every node in the
-    database" response was never wanted, since the dataset is too large.** This reversed an earlier
-    version where `nodeTypeId` was optional and omitting it returned every `KnowledgeNode` row.
-    `KnowledgeNodesController.GetAll`'s parameter is `[FromQuery, Required] Guid? nodeTypeId`, not
-    plain non-nullable `Guid` — **binding a plain `Guid` action parameter (as opposed to a JSON body
-    record's constructor parameter) silently defaults a missing query-string value to `Guid.Empty`
-    with no error at all** (confirmed by probing, not assumed — the equivalent-looking non-nullable
-    `Guid` version of this parameter returned `200 OK` with an empty list for a bare `GET /nodes`,
-    not the `400` the endpoint needs). `Guid?` + `[Required]` gets a real distinction instead: a
-    missing param binds to `null` and `[Required]` rejects it (`400`, `errors["nodeTypeId"]` keyed by
-    the plain parameter name — this is a different failure path than the JSON-body-record case
-    described above, so it does *not* get the `"$.nodeTypeId"`/spurious-`"request"`-key shape that
-    case has), while a syntactically-invalid value (e.g. `nodeTypeId=not-a-guid`) fails during query
-    binding itself, also `400` under the same `errors["nodeTypeId"]` key but a different message
-    ("The value '...' is not valid."). The controller dereferences with
-    `nodeTypeId!.Value` when calling the repository, safe for the same reason the POST/PUT
-    `.Value` dereferences are — validation runs first. **An explicit all-zero GUID
-    (`nodeTypeId=00000000-0000-0000-0000-000000000000`) is still accepted** (`200 OK`, empty
-    result), consistent with the presence-only philosophy established for `KnowledgeNodeRequest`/
-    `KnowledgeRelationRequest` above — "required" means present, not non-default.
+- **`GET /nodes` filters by NodeType *name*, not id — `?nodeTypeName=...`, not `?nodeTypeId=...`.**
+  This reverses the original design (`?nodeTypeId=<guid>`, backed by
+  `IKnowledgeNodeRepository.GetAllAsync(Guid nodeTypeId)`, a plain `WHERE node_type_id = ...`) —
+  reversed once the user pointed out that looking nodes up by a NodeType's *id* isn't a practical
+  query for a caller to make: nothing else hands a client a bare NodeType id to filter with, while
+  the name is exactly what a caller already knows (it's the thing NodeTypes are identified by
+  everywhere else — `NodeTypesController`'s own uniqueness constraint is on `Name`, not a
+  client-facing id). `IKnowledgeNodeRepository.GetAllAsync(string nodeTypeName)` now joins
+  `knowledge_node` to `node_type` on `node_type_id = id`, filtered by `node_type.Name`:
+  ```csharp
+  (from n in _db.KnowledgeNode
+   join nt in _db.NodeType on n.NodeTypeId equals nt.Id
+   where nt.Name == nodeTypeName
+   select n)
+  ```
+  Still a single query, still no separate single-column index needed — `NodeType.Name`'s own unique
+  constraint already indexes the name lookup, and `knowledge_node`'s composite unique constraint
+  (`node_type_id`, `canonical_name`) already indexes the join-back by `node_type_id`, so nothing new
+  had to be added on either table for this to stay a single indexed lookup plus an indexed join.
+  A separate `INodeTypeRepository.GetByNameAsync` lookup step (id-then-filter, two round trips) was
+  tried first and reverted — the join collapses it back into the one query `GetAllAsync` always was,
+  and avoids adding a lookup method to `INodeTypeRepository` that nothing else needs. **No
+  `.OrderBy`/`orderby` on the result** — the old `Guid`-keyed version of this method sorted by
+  `CanonicalName`, but nothing about the endpoint's contract ever promised an order
+  (`KnowledgeNodesController.GetAll`'s own doc comment already said "in no particular order"), so the
+  sort was pure unrequested cost. Removed once the user flagged it during this same rework —
+  callers that need a specific order should sort client-side.
+  - **`nodeTypeName` is a required query parameter on `GET /nodes` — an unfiltered "every node in
+    the database" response was never wanted, since the dataset is too large.**
+    `KnowledgeNodesController.GetAll`'s parameter is `[FromQuery, Required] string? nodeTypeName`.
+    Unlike the old `Guid?` version, a plain `string?` + `[Required]` doesn't need the
+    presence-vs-default workaround `Guid?` needed (see `KnowledgeNodeRequest.NodeTypeId` below) —
+    `[Required]`'s default `AllowEmptyStrings = false` already rejects both a missing param (binds to
+    `null`) and an explicitly empty one (`?nodeTypeName=`, binds to `""`) with the same `400`,
+    `errors["nodeTypeName"]`. There's no format to validate either (any string is syntactically a
+    valid name), so the old "invalid GUID format" `400` case has no equivalent here.
+  - **`GetAll` distinguishes "NodeType doesn't exist" (`404`) from "NodeType exists but has no
+    KnowledgeNodes" (`200` `[]`)** — a caller needs those told apart (most likely a typo'd name vs.
+    a real, if unusual, empty state), so `GetAll` checks existence first via a shared private
+    `NodeTypeExistsAsync(string nodeTypeName)` helper (`(await _nodeTypeRepository.GetAllAsync())
+    .Any(nt => nt.Name == nodeTypeName)` — reuses `INodeTypeRepository`'s existing `GetAllAsync()`,
+    no dedicated lookup method added) before calling `_repository.GetAllAsync(nodeTypeName)`. This
+    reverses an earlier version of this bullet, and this codebase's own established precedent for
+    the old `Guid`-keyed parameter (an explicit all-zero GUID was deliberately accepted as `200 OK`
+    `[]`, no existence check at all — see the superseded design note below) — reversed once the user
+    pointed out that, for a *name*-based filter, an unmatched value is far more likely to be a
+    genuine caller mistake than a deliberately-chosen boundary value the way `Guid.Empty` was, so
+    silently returning an empty list hides exactly the kind of error a caller most needs surfaced.
+    `POST /nodes/resolve/type` (below) needed this same distinction and shares the same
+    `NodeTypeExistsAsync` helper.
+    - **Superseded design note:** an earlier version of this same rework left `GetAll` matching its
+      old Guid-based "no existence check, always `200`" behavior even after the parameter became a
+      name — reasoning that nothing about that precedent was Guid-specific. Reversed once the user
+      called it out directly for `GetAll` too (having already asked for the same fix on
+      `POST /nodes/resolve/type` a turn earlier) — the precedent turned out to be about `Guid.Empty`
+      specifically being a deliberately-accepted non-existent value, not a general "this endpoint
+      never validates existence" rule.
 - **`KnowledgeRelation`** (script `009_CreateKnowledgeRelationTable.sql`) links two
   `KnowledgeNode`s through a `RelationshipType` — `SourceNodeId`/`TargetNodeId` FK to
   `knowledge_node(id)`, `RelationshipTypeId` FKs to `relationship_type(id)`, and a composite
@@ -885,6 +915,24 @@
     implementation `KnowledgeNodeRepository.GetMediaAsync` uses (see the `MediaAsset`/
     `KnowledgeNodeMedia` bullet above for why that one clones too, even though its own override is
     a no-op today).
+- **`POST /nodes/resolve/type`** resolves the same batch of Property Path DSL expressions against
+  every `KnowledgeNode` of a named NodeType in one call — equivalent to `GET
+  /nodes?nodeTypeName=...` fed straight into `POST /nodes/resolve` with the same path list repeated
+  per node, but server-side in one round trip. Request:
+  `ResolveByNodeTypeRequest(string? NodeTypeName, List<string>? Paths)` (`Api/Contracts/
+  ResolveByNodeTypeRequest.cs`), both `[Required]`, `Paths` reusing the same
+  `[MinLength(1), ValidPathExpression]` as `POST /nodes/resolve`'s `ResolvePathsRequestItem`.
+  Response is the exact same `List<ResolvedNodePaths>` shape `POST /nodes/resolve` returns.
+  `KnowledgeNodesController.ResolveByType` checks the NodeType exists via the same
+  `NodeTypeExistsAsync` private helper `GetAll` uses (see the `GET /nodes` bullet above), `404` on a
+  miss, then `_repository.GetAllAsync(nodeTypeName)`, builds a `ResolvePathsRequestItem` per returned
+  node with the same `Paths`, and resolves through the same `ResolveItemsAsync` private helper
+  `Resolve` itself calls (extracted specifically so both resolve actions share the
+  queries→`ResolveAsync`→cursor-walk loop instead of duplicating it). Constructor needs
+  `INodeTypeRepository` for this — it had briefly been dropped when `IKnowledgeNodeRepository
+  .GetAllAsync` first became name-based (nothing in the controller needed it at that point), then
+  reinstated once the `404`-vs-`200 []` distinction was added, first to this action and then to
+  `GetAll` too.
 
 ## API documentation (Swagger)
 - `<GenerateDocumentationFile>`/`<NoWarn>1591</NoWarn>` are set in both `MnemoToad.Knowledge.Api.csproj`

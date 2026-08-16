@@ -143,7 +143,7 @@ Feature: KnowledgeNode API
     * def created = createKnowledgeNode({ nodeTypeId: nodeType.response.id })
 
     Given path 'nodes'
-    And param nodeTypeId = nodeType.response.id
+    And param nodeTypeName = nodeType.response.name
     When method get
     Then status 200
     * def found = karate.filter(response, function(x){ return x.id == created.response.id })
@@ -154,7 +154,7 @@ Feature: KnowledgeNode API
     * def created = createKnowledgeNode({ nodeTypeId: nodeType.response.id, attributes: { isoCode: 'FR' } })
 
     Given path 'nodes'
-    And param nodeTypeId = nodeType.response.id
+    And param nodeTypeName = nodeType.response.name
     When method get
     Then status 200
     * def found = karate.filter(response, function(x){ return x.id == created.response.id })
@@ -167,30 +167,38 @@ Feature: KnowledgeNode API
     * def created2 = createKnowledgeNode({ nodeTypeId: nodeType2.response.id })
 
     Given path 'nodes'
-    And param nodeTypeId = nodeType1.response.id
+    And param nodeTypeName = nodeType1.response.name
     When method get
     Then status 200
     * def foundIds = karate.map(response, function(x){ return x.id })
     And match foundIds contains created1.response.id
     And match foundIds !contains created2.response.id
 
-  Scenario: Reject listing knowledge nodes with a missing node type id
+  Scenario: Reject listing knowledge nodes with a missing node type name
     Given path 'nodes'
     When method get
     Then status 400
 
-  Scenario: Reject listing knowledge nodes with an invalid node type id
+  Scenario: Reject listing knowledge nodes with an empty node type name
     Given path 'nodes'
-    And param nodeTypeId = 'not-a-guid'
+    And param nodeTypeName = ''
     When method get
     Then status 400
 
-  Scenario: List knowledge nodes with an all-zero node type id returns an empty list
+  Scenario: List knowledge nodes with a known node type name and no matching nodes returns an empty list
+    * def nodeType = createNodeType()
+
     Given path 'nodes'
-    And param nodeTypeId = '00000000-0000-0000-0000-000000000000'
+    And param nodeTypeName = nodeType.response.name
     When method get
     Then status 200
     And match response == []
+
+  Scenario: List knowledge nodes with an unknown node type name returns 404
+    Given path 'nodes'
+    And param nodeTypeName = 'ZZ_Karate_NoSuchNodeType'
+    When method get
+    Then status 404
 
   Scenario: Update a knowledge node
     * def nodeType = createNodeType()

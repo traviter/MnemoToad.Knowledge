@@ -20,9 +20,6 @@ public class NodeTypeRepository : INodeTypeRepository
     public async Task<NodeType?> GetByIdAsync(Guid id) =>
         await _db.NodeType.FindAsync(id);
 
-    public async Task<NodeType?> GetByNameAsync(string name) =>
-        await _db.NodeType.FirstOrDefaultAsync(n => n.Name == name);
-
     public async Task<NodeType> CreateAsync(NodeType nodeType)
     {
         _db.NodeType.Add(nodeType);
