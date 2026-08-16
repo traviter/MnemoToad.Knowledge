@@ -159,7 +159,7 @@ public class KnowledgeNodeRepositoryTests
         var stanza = MediaStanza(Guid.NewGuid(), "Flag of France");
         var mappedMediaAssetId = Guid.NewGuid();
         _mediaMapper.Setup(m => m.UpdateFromJson(It.IsAny<KnowledgeNodeMedia>(), stanza))
-            .Callback<JsonObject, KnowledgeNodeMedia>((_, media) =>
+            .Callback<KnowledgeNodeMedia, JsonObject>((media, _) =>
             {
                 media.MediaAssetId = mappedMediaAssetId;
                 media.AltText = "mapped alt text";
@@ -269,7 +269,7 @@ public class KnowledgeNodeRepositoryTests
         var photoStanza = MediaStanza(photoAssetId, "Eiffel Tower");
         var mappedPhotoAssetId = Guid.NewGuid();
         _mediaMapper.Setup(m => m.UpdateFromJson(It.IsAny<KnowledgeNodeMedia>(), photoStanza))
-            .Callback<JsonObject, KnowledgeNodeMedia>((_, media) =>
+            .Callback<KnowledgeNodeMedia, JsonObject>((media, _) =>
             {
                 media.MediaAssetId = mappedPhotoAssetId;
                 media.AltText = "Eiffel Tower";
