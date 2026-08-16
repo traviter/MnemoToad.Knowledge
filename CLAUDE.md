@@ -22,6 +22,22 @@
   workers). A latency-based `Degraded` status and a schema/migration-drift check (comparing the DB
   schema version DbMigrator last applied against what the app build expects) were both considered and
   deliberately deferred, not overlooked, when DB-down was added as the first real check.
+  **`AddNpgSql(...)` deliberately stays unconditional** — unlike EF Core's `UseNpgsql`, `AddNpgSql`
+  (from `AspNetCore.HealthChecks.NpgSql`) validates its connection-string argument eagerly at
+  service-registration time (`ArgumentNullException` if null), not lazily when the check actually
+  runs. That's wanted: a genuinely missing `ConnectionStrings:Default` should fail the app loudly at
+  startup, not silently produce a `/health` with zero registered checks. It did, however, break every
+  `*ControllerSystemTests` class in CI, since `MockedDbWebApplicationFactory` builds the real
+  `Program`/`AddApiServices` pipeline and CI has no `ConnectionStrings:Default` (only defined in the
+  git-ignored `appsettings.Development.json`). Fixed on the test side instead —
+  `MockedDbWebApplicationFactory.ConfigureWebHost` now calls `ConfigureAppConfiguration` to inject a
+  fake `ConnectionStrings:Default` via `AddInMemoryCollection` before the host builds. This works
+  because `WebApplicationFactory<Program>`'s interception point is `WebApplication.CreateBuilder`
+  itself (not `Build()`), so a `ConfigureAppConfiguration` override lands in `builder.Configuration`
+  before `Program.cs`'s `AddApiServices(builder.Configuration)` call ever reads it — confirmed
+  empirically, not just assumed, since top-level `Program.cs` has no `ConfigureServices` delegate for
+  the factory to slot in front of. The fake value is never actually connected to (system tests never
+  call `/health`), so it just needs to be a syntactically non-null/non-empty string.
 - `MnemoToad.Knowledge.Data` — class library: entities (under `Entities/`), `AppDbContext` (which implements
   `IAppDbContext` — see "API patterns" below), and repositories (under `Repositories/`, e.g.
   `INodeTypeRepository`/`NodeTypeRepository`) that wrap `IAppDbContext` behind an interface. Holds
