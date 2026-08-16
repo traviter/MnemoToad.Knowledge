@@ -2,13 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using MnemoToad.Knowledge.Api.Json;
 using MnemoToad.Knowledge.Api.Swagger;
 using MnemoToad.Knowledge.Data;
-using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
-using MnemoToad.Knowledge.Data.EntityMappers;
 using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
 using MnemoToad.Knowledge.Data.Repositories;
+using MnemoToad.Knowledge.Data.Entities.Operations;
+using MnemoToad.Knowledge.Data.DbUtil;
 
 namespace MnemoToad.Knowledge.Api.Configuration;
 

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MnemoToad.Knowledge.Data.Entities;
-using MnemoToad.Knowledge.Data.EntityMappers;
+using MnemoToad.Knowledge.Data.Entities.Operations;
 using MnemoToad.Knowledge.Data.Repositories;
 using MnemoToad.Knowledge.Tests.TestSupport;
 using NUnit.Framework;

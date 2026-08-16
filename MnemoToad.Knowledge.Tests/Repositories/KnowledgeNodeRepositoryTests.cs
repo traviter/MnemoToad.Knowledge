@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Moq;
-using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
 using MnemoToad.Knowledge.Data.Repositories;
 using MnemoToad.Knowledge.Tests.TestSupport;
 using NUnit.Framework;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using MnemoToad.Knowledge.Data.DbUtil;
 
 namespace MnemoToad.Knowledge.Tests.Repositories;
 

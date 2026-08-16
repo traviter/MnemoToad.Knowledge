@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using MnemoToad.Knowledge.Data.Common;
+using MnemoToad.Knowledge.Data.DbUtil;
 using MnemoToad.Knowledge.Data.Entities;
 using Npgsql;
 using System.ComponentModel.DataAnnotations;

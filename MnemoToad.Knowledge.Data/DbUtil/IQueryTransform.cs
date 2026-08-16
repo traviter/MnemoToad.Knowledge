@@ -1,4 +1,4 @@
-namespace MnemoToad.Knowledge.Data.QueryTransforms;
+namespace MnemoToad.Knowledge.Data.DbUtil;
 
 public interface IQueryTransform<TSource, TDestination>
 {

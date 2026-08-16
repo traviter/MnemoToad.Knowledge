@@ -1,6 +1,6 @@
 using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
-using MnemoToad.Knowledge.Data.EntityMappers;
+using MnemoToad.Knowledge.Data.Entities.Operations;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
 using MnemoToad.Knowledge.Tests.TestSupport;

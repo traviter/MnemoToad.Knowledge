@@ -1,4 +1,4 @@
-using MnemoToad.Knowledge.Data.EntityMappers;
+using MnemoToad.Knowledge.Data.Entities.Operations;
 using MnemoToad.Knowledge.Data.PathResolution;
 using MnemoToad.Knowledge.Data.QueryTransforms;
 

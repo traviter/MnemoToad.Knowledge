@@ -2,10 +2,10 @@ using Moq;
 using MockQueryable;
 using MnemoToad.Knowledge.Data.Common;
 using MnemoToad.Knowledge.Data.Entities;
-using MnemoToad.Knowledge.Data.QueryTransforms;
 using MnemoToad.Knowledge.Data.TerminalResolvers;
 using NUnit.Framework;
 using System.Text.Json.Nodes;
+using MnemoToad.Knowledge.Data.DbUtil;
 
 namespace MnemoToad.Knowledge.Tests.TerminalResolvers;
 

@@ -1,5 +1,5 @@
 using MnemoToad.Knowledge.Data.Entities;
-using MnemoToad.Knowledge.Data.EntityMappers;
+using MnemoToad.Knowledge.Data.Entities.Operations;
 using NUnit.Framework;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;

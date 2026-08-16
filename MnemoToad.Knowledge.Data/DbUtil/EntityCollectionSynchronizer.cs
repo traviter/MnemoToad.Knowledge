@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace MnemoToad.Knowledge.Data.Common;
+namespace MnemoToad.Knowledge.Data.DbUtil;
 
 public class EntityCollectionSynchronizer<TEntity, TValue> where TEntity : class
 {

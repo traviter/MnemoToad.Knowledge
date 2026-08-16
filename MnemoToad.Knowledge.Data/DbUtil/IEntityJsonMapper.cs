@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace MnemoToad.Knowledge.Data.Common;
+namespace MnemoToad.Knowledge.Data.DbUtil;
 
 public interface IEntityJsonMapper<TEntity>
 {

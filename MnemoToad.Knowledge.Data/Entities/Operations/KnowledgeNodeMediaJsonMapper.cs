@@ -1,9 +1,8 @@
-using MnemoToad.Knowledge.Data.Common;
-using MnemoToad.Knowledge.Data.Entities;
+using MnemoToad.Knowledge.Data.DbUtil;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 
-namespace MnemoToad.Knowledge.Data.EntityMappers;
+namespace MnemoToad.Knowledge.Data.Entities.Operations;
 
 public class KnowledgeNodeMediaJsonMapper : IEntityJsonMapper<KnowledgeNodeMedia>
 {
