@@ -158,7 +158,7 @@ public class KnowledgeNodeRepositoryTests
     {
         var stanza = MediaStanza(Guid.NewGuid(), "Flag of France");
         var mappedMediaAssetId = Guid.NewGuid();
-        _mediaMapper.Setup(m => m.UpdateFromJson(stanza, It.IsAny<KnowledgeNodeMedia>()))
+        _mediaMapper.Setup(m => m.UpdateFromJson(It.IsAny<KnowledgeNodeMedia>(), stanza))
             .Callback<JsonObject, KnowledgeNodeMedia>((_, media) =>
             {
                 media.MediaAssetId = mappedMediaAssetId;
@@ -178,14 +178,14 @@ public class KnowledgeNodeRepositoryTests
         Assert.That(row.Key, Is.EqualTo("flag"));
         Assert.That(row.MediaAssetId, Is.EqualTo(mappedMediaAssetId));
         Assert.That(row.AltText, Is.EqualTo("mapped alt text"));
-        _mediaMapper.Verify(m => m.UpdateFromJson(stanza, It.Is<KnowledgeNodeMedia>(r => r.Key == "flag" && r.KnowledgeNodeId == knowledgeNode.Id)), Times.Once);
+        _mediaMapper.Verify(m => m.UpdateFromJson(It.Is<KnowledgeNodeMedia>(r => r.Key == "flag" && r.KnowledgeNodeId == knowledgeNode.Id), stanza), Times.Once);
     }
 
     [Test]
     public void CreateAsync_WhenMapperThrowsValidationException_PropagatesItUnchanged()
     {
         var stanza = new JsonObject();
-        _mediaMapper.Setup(m => m.UpdateFromJson(stanza, It.IsAny<KnowledgeNodeMedia>())).Throws(new ValidationException("The media entry 'flag' must include a valid 'id'."));
+        _mediaMapper.Setup(m => m.UpdateFromJson(It.IsAny<KnowledgeNodeMedia>(), stanza)).Throws(new ValidationException("The media entry 'flag' must include a valid 'id'."));
         var knowledgeNode = new KnowledgeNode
         {
             Id = Guid.NewGuid(),
@@ -268,7 +268,7 @@ public class KnowledgeNodeRepositoryTests
         var flagStanza = MediaStanza(Guid.NewGuid(), "New flag");
         var photoStanza = MediaStanza(photoAssetId, "Eiffel Tower");
         var mappedPhotoAssetId = Guid.NewGuid();
-        _mediaMapper.Setup(m => m.UpdateFromJson(photoStanza, It.IsAny<KnowledgeNodeMedia>()))
+        _mediaMapper.Setup(m => m.UpdateFromJson(It.IsAny<KnowledgeNodeMedia>(), photoStanza))
             .Callback<JsonObject, KnowledgeNodeMedia>((_, media) =>
             {
                 media.MediaAssetId = mappedPhotoAssetId;
@@ -285,8 +285,8 @@ public class KnowledgeNodeRepositoryTests
         });
 
         Assert.That(updated, Is.Not.Null);
-        _mediaMapper.Verify(m => m.UpdateFromJson(flagStanza, It.Is<KnowledgeNodeMedia>(r => r.Key == "flag")), Times.Once);
-        _mediaMapper.Verify(m => m.UpdateFromJson(photoStanza, It.Is<KnowledgeNodeMedia>(r => r.Key == "photo" && r.KnowledgeNodeId == knowledgeNode.Id)), Times.Once);
+        _mediaMapper.Verify(m => m.UpdateFromJson(It.Is<KnowledgeNodeMedia>(r => r.Key == "flag"), flagStanza), Times.Once);
+        _mediaMapper.Verify(m => m.UpdateFromJson(It.Is<KnowledgeNodeMedia>(r => r.Key == "photo" && r.KnowledgeNodeId == knowledgeNode.Id), photoStanza), Times.Once);
         var rows = await _db.KnowledgeNodeMedia.AsNoTracking().Where(m => m.KnowledgeNodeId == knowledgeNode.Id).ToListAsync();
         Assert.That(rows.Select(r => r.Key), Is.EquivalentTo(new[] { "flag", "photo" }));
         var photoRow = rows.Single(r => r.Key == "photo");
@@ -305,7 +305,7 @@ public class KnowledgeNodeRepositoryTests
         await _db.SaveChangesAsync();
 
         var invalidStanza = new JsonObject();
-        _mediaMapper.Setup(m => m.UpdateFromJson(invalidStanza, It.IsAny<KnowledgeNodeMedia>())).Throws(new ValidationException("The media entry 'flag' must include a valid 'id'."));
+        _mediaMapper.Setup(m => m.UpdateFromJson(It.IsAny<KnowledgeNodeMedia>(), invalidStanza)).Throws(new ValidationException("The media entry 'flag' must include a valid 'id'."));
 
         var ex = Assert.ThrowsAsync<ValidationException>(() => _repository.UpdateAsync(new KnowledgeNode
         {

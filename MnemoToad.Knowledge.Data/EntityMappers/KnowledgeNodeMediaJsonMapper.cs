@@ -15,7 +15,7 @@ public class KnowledgeNodeMediaJsonMapper : IEntityJsonMapper<KnowledgeNodeMedia
         return json;
     }
 
-    public void UpdateFromJson(JsonObject json, KnowledgeNodeMedia entity)
+    public void UpdateFromJson(KnowledgeNodeMedia entity, JsonObject json)
     {
         var (mediaAssetId, altText) = ExtractMediaFields(entity.Key, json);
         entity.MediaAssetId = mediaAssetId;

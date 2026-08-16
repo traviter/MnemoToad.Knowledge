@@ -6,5 +6,5 @@ public interface IEntityJsonMapper<TEntity>
 {
     JsonObject ToJson(TEntity entity);
 
-    void UpdateFromJson(JsonObject json, TEntity entity);
+    void UpdateFromJson(TEntity entity, JsonObject json);
 }

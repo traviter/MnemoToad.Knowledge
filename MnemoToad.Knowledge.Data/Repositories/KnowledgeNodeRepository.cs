@@ -29,7 +29,7 @@ public class KnowledgeNodeRepository : IKnowledgeNodeRepository
             dbSet: _db.KnowledgeNodeMedia,
             keySelector: m => m.Key,
             createBlank: (knowledgeNodeId, key) => new KnowledgeNodeMedia { KnowledgeNodeId = knowledgeNodeId, Key = key },
-            applyValue: (media, stanza) => _mediaMapper.UpdateFromJson(stanza, media));
+            applyValue: _mediaMapper.UpdateFromJson);
     }
 
     public Task<List<KnowledgeNode>> GetAllAsync(Guid nodeTypeId) =>

@@ -83,7 +83,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var newMediaAssetId = Guid.NewGuid();
         var newStanza = new JsonObject { ["id"] = newMediaAssetId.ToString(), ["alt_text"] = "New text", ["credit"] = "Someone" };
 
-        _mapper.UpdateFromJson(newStanza, media);
+        _mapper.UpdateFromJson(media, newStanza);
 
         Assert.That(media.KnowledgeNodeId, Is.EqualTo(knowledgeNodeId));
         Assert.That(media.Key, Is.EqualTo("flag"));
@@ -106,7 +106,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         };
         var invalidStanza = new JsonObject { ["alt_text"] = "New text" };
 
-        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(invalidStanza, media));
+        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(media, invalidStanza));
 
         Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'id'."));
         Assert.That(media.MediaAssetId, Is.EqualTo(originalMediaAssetId));
@@ -119,7 +119,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var media = new KnowledgeNodeMedia { KnowledgeNodeId = Guid.NewGuid(), Key = "flag" };
         var stanza = new JsonObject { ["id"] = "not-a-guid", ["alt_text"] = "A flag" };
 
-        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza, media));
+        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(media, stanza));
         Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'id'."));
     }
 
@@ -129,7 +129,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var media = new KnowledgeNodeMedia { KnowledgeNodeId = Guid.NewGuid(), Key = "flag" };
         var stanza = new JsonObject { ["id"] = Guid.NewGuid().ToString() };
 
-        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza, media));
+        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(media, stanza));
         Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'alt_text'."));
     }
 
@@ -139,7 +139,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var media = new KnowledgeNodeMedia { KnowledgeNodeId = Guid.NewGuid(), Key = "flag" };
         var stanza = new JsonObject { ["id"] = Guid.NewGuid().ToString(), ["alt_text"] = 123 };
 
-        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza, media));
+        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(media, stanza));
         Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'alt_text'."));
     }
 
@@ -149,7 +149,7 @@ public class KnowledgeNodeMediaJsonMapperTests
         var media = new KnowledgeNodeMedia { KnowledgeNodeId = Guid.NewGuid(), Key = "flag" };
         JsonObject? stanza = null;
 
-        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(stanza!, media));
+        var ex = Assert.Throws<ValidationException>(() => _mapper.UpdateFromJson(media, stanza!));
         Assert.That(ex!.Message, Is.EqualTo("The media entry 'flag' must include a valid 'id'."));
     }
 }
