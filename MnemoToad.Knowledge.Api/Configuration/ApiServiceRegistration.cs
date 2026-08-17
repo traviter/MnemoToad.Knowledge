@@ -2,19 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using MnemoToad.Knowledge.Api.Json;
 using MnemoToad.Knowledge.Api.Swagger;
 using MnemoToad.Knowledge.Data;
-using MnemoToad.Knowledge.Data.Entities;
-using MnemoToad.Knowledge.Data.PathResolution;
-using MnemoToad.Knowledge.Data.QueryTransforms;
-using MnemoToad.Knowledge.Data.TerminalResolvers;
-using MnemoToad.Knowledge.Data.Repositories;
-using MnemoToad.Knowledge.Data.Entities.Operations;
-using MnemoToad.Knowledge.Data.DbUtil;
+using MnemoToad.Knowledge.Data.Configuration;
 
 namespace MnemoToad.Knowledge.Api.Configuration;
 
-public static class ServiceCollectionExtensions
+public static class ApiServiceRegistration
 {
-    public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddApiServices(IServiceCollection services, IConfiguration configuration)
     {
         // Wires up routing/model-binding/action-invocation for [ApiController] classes.
         services.AddControllers()
@@ -39,17 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddHealthChecks()
             .AddNpgSql(configuration.GetConnectionString("Default")!, name: "database");
 
-        services.AddScoped<IEntityJsonMapper<KnowledgeNodeMedia>, KnowledgeNodeMediaJsonMapper>();
-
-        services.AddScoped<INodeTypeRepository, NodeTypeRepository>();
-        services.AddScoped<IKnowledgeNodeRepository, KnowledgeNodeRepository>();
-        services.AddScoped<IRelationshipTypeRepository, RelationshipTypeRepository>();
-        services.AddScoped<IKnowledgeRelationRepository, KnowledgeRelationRepository>();
-        services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
-        services.AddScoped<IPathExpressionParser, PathExpressionParser>();
-        services.AddScoped<ITerminalResolverFactory, TerminalResolverFactory>();
-        services.AddScoped<IQueryTransform<KnowledgeNode, KnowledgeNode>, NodeRelationshipQueryTransform>();
-        services.AddScoped<IPathResolutionRepository, PathResolutionRepository>();
+        DataServiceRegistration.AddDataServices(services);
 
         return services;
     }

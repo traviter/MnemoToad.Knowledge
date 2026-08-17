@@ -11,7 +11,7 @@
 - `MnemoToad.Knowledge.Api` — ASP.NET Core Web API, .NET 10 (LTS), controllers (refactored off minimal APIs).
   `Program.cs` has no route mappings left — every endpoint, including `/health`, is a controller.
   `HealthController` injects the framework's `HealthCheckService` (registered via `AddHealthChecks()`
-  + `AddNpgSql(...)` in `ServiceCollectionExtensions.cs`, from the `AspNetCore.HealthChecks.NpgSql`
+  + `AddNpgSql(...)` in `ApiServiceRegistration.cs`, from the `AspNetCore.HealthChecks.NpgSql`
   package) rather than the endpoint being mapped via `app.MapHealthChecks(...)` — deliberate, to keep
   the "no route mappings in `Program.cs`" invariant above. Response is `{ status, checks: [{ name,
   status, description }] }`, `status` values being the `HealthStatus` enum names (`Healthy`/
@@ -44,14 +44,44 @@
   the `Npgsql.EntityFrameworkCore.PostgreSQL` package reference directly
   (needed to catch `Npgsql.PostgresException` when translating constraint failures — see
   "Constraint-violation translation" below); `.UseNpgsql(...)`/`.UseSnakeCaseNamingConvention()`
-  themselves are still called from `MnemoToad.Knowledge.Api`'s `ServiceCollectionExtensions.cs`, not here, via
+  themselves are still called from `MnemoToad.Knowledge.Api`'s `ApiServiceRegistration.cs`, not here, via
   the transitive package reference that flows through the `MnemoToad.Knowledge.Api` → `MnemoToad.Knowledge.Data` project
   reference — `MnemoToad.Knowledge.Api`'s own `.csproj` has no direct `PackageReference` to the Npgsql
   provider. There is no service layer — controllers depend directly on repository interfaces (see
   "API patterns" below for why it was removed). This project stays entities + DbContext + repositories
   only, no business rules, with the one deliberate exception described below (repositories translating
   a known DB constraint into a `ValidationException`, which isn't pre-flight business logic, just a
-  direct translation of a failure the DB already caught).
+  direct translation of a failure the DB already caught). **Registering the repositories (and their
+  own Data-internal collaborators — the path-resolution/media-mapping pieces) is this project's own
+  job, not the API's** — `MnemoToad.Knowledge.Data/Configuration/DataServiceRegistration.cs` exposes a
+  single `static IServiceCollection AddDataServices(IServiceCollection services)` method that binds
+  all nine `INodeTypeRepository`/`IKnowledgeNodeRepository`/etc. interfaces to their concrete types.
+  `MnemoToad.Knowledge.Api`'s `ApiServiceRegistration.AddApiServices` calls
+  `DataServiceRegistration.AddDataServices(services)` once and otherwise never names a concrete
+  Data-project type — this reverses an earlier version where the API's own registration code had nine
+  individual `AddScoped<TInterface, TConcrete>()` calls and had to import six different
+  `MnemoToad.Knowledge.Data.*` namespaces to do it, which meant the API had to know about Data's
+  internal class layout just to wire dependencies it never otherwise touches. **Deliberately plain
+  static methods, not `this`-parameter extension methods** — an extension-method call site
+  (`services.AddDataServices()`) doesn't show which class/namespace it comes from without IDE help;
+  `DataServiceRegistration.AddDataServices(services)`/`ApiServiceRegistration.AddApiServices(services,
+  configuration)` are ordinary static calls, directly navigable. An `IServiceCollectionConfigurator`
+  interface implemented by both was considered and rejected — nothing ever needs to treat the two
+  registrars interchangeably (`Program.cs` always constructs/calls the one concrete Api registrar by
+  name), and the two methods don't even share a signature (`AddApiServices` needs `IConfiguration`
+  for the connection string, `AddDataServices` doesn't), so a shared interface would force an unused
+  parameter onto one side purely for uniformity. `IAppDbContext` itself is still registered by the
+  API (it needs the connection string), and DI resolves it into these repositories the same way it
+  always has. **Lifetimes: `AddSingleton` for the two registrations with no `IAppDbContext` dependency
+  anywhere in their constructor graph — `IEntityJsonMapper<KnowledgeNodeMedia>`/
+  `KnowledgeNodeMediaJsonMapper` (pure functions over its parameters, no fields) and
+  `IPathExpressionParser`/`PathExpressionParser` (only `static readonly` compiled regexes) — everything
+  else stays `AddScoped`.** The six repositories, `ITerminalResolverFactory`/`TerminalResolverFactory`,
+  and `IQueryTransform<KnowledgeNode, KnowledgeNode>`/`NodeRelationshipQueryTransform` all take
+  `IAppDbContext` directly (or, for `PathResolutionRepository`, transitively through
+  `ITerminalResolverFactory`) — `IAppDbContext`/`AppDbContext` itself has to stay scoped (a `DbContext`
+  isn't safe to share across concurrent requests), so anything depending on it, directly or
+  transitively, stays scoped too rather than becoming a captive dependency of a singleton.
 - `MnemoToad.Knowledge.DbMigrator` — standalone console app running DbUp against Postgres. NOT part of any
   project reference from the API; only shares the solution file.
 - `MnemoToad.Knowledge.Karate` — Java/Maven, integration tests. Separate toolchain, not in the `.sln`, no
@@ -238,10 +268,15 @@
   `WEBSITE_HEALTHCHECK_MAXPINGFAILURES` to auto-evict unhealthy instances from the pool first).
 
 ## API patterns (controllers)
-- Service registration (`AddControllers`, `AddSwaggerGen`, `AddDbContext`, `AddScoped<...>`, etc.)
-  lives in `MnemoToad.Knowledge.Api/Configuration/ServiceCollectionExtensions.cs`, as an
-  `AddApiServices(this IServiceCollection, IConfiguration)` extension method — not inline in
-  `Program.cs`. Keeps `Program.cs` a thin composition root as registrations grow. The middleware
+- API-owned service registration (`AddControllers`, `AddSwaggerGen`, `AddDbContext`, the health
+  check, etc.) lives in `MnemoToad.Knowledge.Api/Configuration/ApiServiceRegistration.cs`, as a
+  `static IServiceCollection AddApiServices(IServiceCollection services, IConfiguration
+  configuration)` method, called from `Program.cs` as `ApiServiceRegistration.AddApiServices(
+  builder.Services, builder.Configuration)` — not inline in `Program.cs`, and deliberately not a
+  `this`-parameter extension method (see the "Solution layout" bullet above for why). Keeps
+  `Program.cs` a thin composition root as registrations grow. Data-owned registration (repositories
+  and their own internal collaborators) lives in `MnemoToad.Knowledge.Data`'s own
+  `DataServiceRegistration.AddDataServices` instead — see the "Solution layout" bullet above. The middleware
   *pipeline* (`UseSwagger`, `MapControllers`, etc.) stays inline in `Program.cs` — it's short enough
   to read at a glance and its call order matters, which is clearer left visible in one place.
 - One controller per resource, named `<Entities>Controller` (plural, e.g. `NodeTypesController`),
@@ -257,7 +292,7 @@
   `SaveChangesAsync()` (added alongside the interface so callers don't need to pass a
   `CancellationToken` they never used) — and `AppDbContext` implements it directly, so no behavior
   changed, only what type repositories ask for in their constructor.
-  `ServiceCollectionExtensions.cs` resolves it to the same scoped `AppDbContext` instance
+  `ApiServiceRegistration.cs` resolves it to the same scoped `AppDbContext` instance
   (`services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>())`). **This reverses
   an earlier version of this rule that said not to add `IAppDbContext`**, reasoning that it'd be a
   redundant second layer over what the repository interface already provided — that reasoning was
@@ -334,10 +369,10 @@
   `"request"` key ("The request field is required.") also appears in the same response).
 - `ValidationException` (thrown by the repository — see "Constraint-violation translation"
   below) is translated to a `400` centrally, not per-action. `Configuration/
-  ValidationExceptionHandler.cs` (same file/namespace as `ServiceCollectionExtensions.cs` — no
+  ValidationExceptionHandler.cs` (same namespace as `ApiServiceRegistration.cs` — no
   dedicated `ExceptionHandling` namespace for one class) implements `IExceptionHandler`,
   registered via `services.AddExceptionHandler<ValidationExceptionHandler>()` +
-  `services.AddProblemDetails()` in `ServiceCollectionExtensions.AddApiServices`, and wired into
+  `services.AddProblemDetails()` in `ApiServiceRegistration.AddApiServices`, and wired into
   the pipeline via `app.UseExceptionHandler()` in `Program.cs` (right after `builder.Build()`,
   before `UseSwagger()`/`MapControllers()`). It writes the same RFC 7807 `ProblemDetails` shape
   the old per-action `Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest)`
@@ -596,7 +631,7 @@
     throws `InvalidOperationException` (not `JsonException`) for an object/array token, which
     `SystemTextJsonInputFormatter` doesn't translate into a 400 — so
     `MnemoToad.Knowledge.Api/Json/ScalarJsonValueConverter.cs` is registered via
-    `AddJsonOptions` in `ServiceCollectionExtensions.cs` specifically to rethrow as `JsonException`,
+    `AddJsonOptions` in `ApiServiceRegistration.cs` specifically to rethrow as `JsonException`,
     keeping a bad attribute value a normal 400 instead of a 500. **`null` is rejected the same
     way now, not accepted — this reverses an earlier version of the converter that explicitly
     allowed it** (`Value`/`Attributes`/`KnowledgeNodeRequest.Attributes` were all `JsonValue?`
@@ -756,7 +791,7 @@
     here; the row can't even be built yet), it still belongs behind the same repository→controller
     boundary, consistent with "repository owns write-time translation, no service layer."
     `KnowledgeNodeRepository` takes `IEntityJsonMapper<KnowledgeNodeMedia>` as a constructor
-    dependency (registered in `ServiceCollectionExtensions.cs`), and `TerminalResolverFactory`
+    dependency (registered in `DataServiceRegistration.cs`), and `TerminalResolverFactory`
     constructs a bare `new KnowledgeNodeMediaJsonMapper()` directly for `MediaTerminalResolver`, same
     "build collaborators itself, no DI" pattern as its other resolvers (see the
     `ITerminalResolverFactory` bullet below).
@@ -908,17 +943,18 @@
     composed query return no rows, with nothing left to inspect to say which join it was. DSL
     syntax errors and an unknown column name still get their own specific messages — both are
     caught in memory, before any query runs.
-  - **`ITerminalResolverFactory`/`TerminalResolverFactory` is the only piece the API project
-    registers or references** — `ServiceCollectionExtensions.cs` has exactly one
-    `AddScoped<ITerminalResolverFactory, TerminalResolverFactory>()` line, nothing for
-    `ITerminalResolver`, `ColumnTerminalResolver`, `AttributeTerminalResolver`, or
-    `MediaTerminalResolver` anywhere in the API project. `TerminalResolverFactory` builds all three
+  - **`ITerminalResolverFactory`/`TerminalResolverFactory` is the only piece registered for path
+    resolution at all** — `MnemoToad.Knowledge.Data/Configuration/DataServiceRegistration.cs`'s
+    `AddDataServices` has exactly one `AddScoped<ITerminalResolverFactory, TerminalResolverFactory>()`
+    line, nothing for `ITerminalResolver`, `ColumnTerminalResolver`, `AttributeTerminalResolver`, or
+    `MediaTerminalResolver` anywhere (and, since `AddDataServices` moved here, nothing in the API
+    project at all — see the "Solution layout" bullet above). `TerminalResolverFactory` builds all three
     resolvers itself, directly, from the scoped `IAppDbContext` it's constructed with (no
     `IServiceProvider` service-locator call), keyed by `PathTerminalKind`; `GetResolver` throws
     `InvalidOperationException` rather than returning null for an unregistered kind, since that
     state should be unreachable given the enum is closed and every value is wired up.
     `PathResolutionRepository` itself takes `IQueryTransform<KnowledgeNode, KnowledgeNode>` as a
-    fourth constructor parameter (`ServiceCollectionExtensions.cs` has a matching
+    fourth constructor parameter (`DataServiceRegistration.cs` has a matching
     `AddScoped<IQueryTransform<KnowledgeNode, KnowledgeNode>, NodeRelationshipQueryTransform>()`
     line) rather than constructing `NodeRelationshipQueryTransform` internally — a deliberate
     reversal of the original "minimize API registration surface" call, made specifically so
@@ -968,7 +1004,7 @@
 - `<GenerateDocumentationFile>`/`<NoWarn>1591</NoWarn>` are set in both `MnemoToad.Knowledge.Api.csproj`
   and `MnemoToad.Knowledge.Data.csproj` — the latter because entities (e.g. `NodeType`) are returned
   directly as responses (no separate response DTOs, per "API patterns" above), so their property docs
-  have to come from `MnemoToad.Knowledge.Data`'s own XML file. `ServiceCollectionExtensions.cs` calls
+  have to come from `MnemoToad.Knowledge.Data`'s own XML file. `ApiServiceRegistration.cs` calls
   `options.IncludeXmlComments(...)` for both assemblies' generated `.xml` files.
 - Sample request/response payloads come from `MnemoToad.Knowledge.Api/Swagger/ExampleSchemaFilter.cs`
   — a single `ISchemaFilter` holding a `Type → example` map. Add an entry there for a new type;
