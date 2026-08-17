@@ -29,15 +29,26 @@
   startup, not silently produce a `/health` with zero registered checks. It did, however, break every
   `*ControllerSystemTests` class in CI, since `MockedDbWebApplicationFactory` builds the real
   `Program`/`AddApiServices` pipeline and CI has no `ConnectionStrings:Default` (only defined in the
-  git-ignored `appsettings.Development.json`). Fixed on the test side instead —
-  `MockedDbWebApplicationFactory.ConfigureWebHost` now calls `ConfigureAppConfiguration` to inject a
-  fake `ConnectionStrings:Default` via `AddInMemoryCollection` before the host builds. This works
-  because `WebApplicationFactory<Program>`'s interception point is `WebApplication.CreateBuilder`
-  itself (not `Build()`), so a `ConfigureAppConfiguration` override lands in `builder.Configuration`
-  before `Program.cs`'s `AddApiServices(builder.Configuration)` call ever reads it — confirmed
-  empirically, not just assumed, since top-level `Program.cs` has no `ConfigureServices` delegate for
-  the factory to slot in front of. The fake value is never actually connected to (system tests never
-  call `/health`), so it just needs to be a syntactically non-null/non-empty string.
+  git-ignored `appsettings.Development.json`). Fixed on the test side —
+  `MockedDbWebApplicationFactory`'s constructor sets a fake `ConnectionStrings__Default` **environment
+  variable** before the host is ever built. **A first attempt at this fix used
+  `ConfigureWebHost`/`ConfigureAppConfiguration` + `AddInMemoryCollection` instead, on the assumption
+  that `WebApplicationFactory<Program>`'s interception point is `WebApplication.CreateBuilder` itself
+  and so would land in `builder.Configuration` before `Program.cs`'s
+  `AddApiServices(builder.Configuration)` call ever read it — that assumption was wrong.** The
+  `HostFactoryResolver` machinery `WebApplicationFactory` uses for a top-level-statement `Program.cs`
+  invokes `Program.Main` directly, and `AddApiServices` (hence `AddNpgSql`'s eager null check) runs
+  *before* `builder.Build()` — the point at which a `ConfigureAppConfiguration` override actually
+  applies. That bug shipped anyway because the only commit that changed it
+  (`MnemoToad.Knowledge.Tests/**` only) fell outside `pipeline.yml`'s `api` path filter, so CI's
+  `unit-tests` job was silently skipped for it, and locally every system test passed regardless
+  because the real `appsettings.Development.json` connection string satisfied `AddNpgSql` on its own
+  — masking that the injected fake value was never actually taking effect. An environment variable
+  sidesteps the timing problem entirely: `WebApplicationBuilder`'s default config sources always
+  include environment variables, read at `WebApplication.CreateBuilder(args)` time, so setting it in
+  the factory's constructor (before any host-building starts) guarantees it's there in time. The fake
+  value is never actually connected to (system tests never call `/health`), so it just needs to be a
+  syntactically non-null/non-empty string.
 - `MnemoToad.Knowledge.Data` — class library: entities (under `Entities/`), `AppDbContext` (which implements
   `IAppDbContext` — see "API patterns" below), and repositories (under `Repositories/`, e.g.
   `INodeTypeRepository`/`NodeTypeRepository`) that wrap `IAppDbContext` behind an interface. Holds
