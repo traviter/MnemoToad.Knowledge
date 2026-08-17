@@ -29,6 +29,12 @@ public static class DataServiceRegistration
             sp.GetRequiredService<ITerminalResolverFactory>(),
             sp.GetRequiredService<ForwardNodeRelationshipQueryTransform>(),
             sp.GetRequiredService<BackwardNodeRelationshipQueryTransform>()));
+        services.AddScoped<IPathTreeResolutionRepository>(sp => new PathTreeResolutionRepository(
+            sp.GetRequiredService<IAppDbContext>(),
+            sp.GetRequiredService<IPathExpressionParser>(),
+            sp.GetRequiredService<ITerminalResolverFactory>(),
+            sp.GetRequiredService<ForwardNodeRelationshipQueryTransform>(),
+            sp.GetRequiredService<BackwardNodeRelationshipQueryTransform>()));
         return services;
     }
 }

@@ -18,15 +18,18 @@ public class KnowledgeNodesController : ControllerBase
 {
     private readonly IKnowledgeNodeRepository _repository;
     private readonly IPathResolutionRepository _pathResolutionRepository;
+    private readonly IPathTreeResolutionRepository _pathTreeResolutionRepository;
     private readonly INodeTypeRepository _nodeTypeRepository;
 
     public KnowledgeNodesController(
         IKnowledgeNodeRepository repository,
         IPathResolutionRepository pathResolutionRepository,
+        IPathTreeResolutionRepository pathTreeResolutionRepository,
         INodeTypeRepository nodeTypeRepository)
     {
         _repository = repository;
         _pathResolutionRepository = pathResolutionRepository;
+        _pathTreeResolutionRepository = pathTreeResolutionRepository;
         _nodeTypeRepository = nodeTypeRepository;
     }
 
@@ -159,13 +162,21 @@ public class KnowledgeNodesController : ControllerBase
 
     /// <summary>
     /// Finds every KnowledgeNode of the named NodeType and resolves the same set of Property Path
-    /// DSL expressions against each — equivalent to calling <c>GET /nodes?nodeTypeName=...</c> then
-    /// feeding every returned node id, paired with the same paths, into <c>POST /nodes/resolve</c>.
+    /// DSL expressions against each, treating the paths as a join tree rather than independent
+    /// lookups — shared edge prefixes across paths are traversed once and stay correlated, and each
+    /// matching KnowledgeNode can produce more than one result entry (one per combination), the
+    /// cartesian product of however many relations its edge traversals actually matched.
     /// </summary>
     /// <param name="request">The NodeType name and the paths to resolve against each of its nodes.</param>
     /// <response code="200">
-    /// One result per matching KnowledgeNode, same shape as <c>POST /nodes/resolve</c>. Empty array
-    /// if the NodeType exists but has no KnowledgeNodes.
+    /// One entry per resolved combination, same shape as <c>POST /nodes/resolve</c> — a
+    /// <c>nodeId</c> can appear more than once. Traversing an edge that matches zero relations
+    /// discards the entire combination it would have contributed to, including that node's own
+    /// otherwise-resolved terminals — a KnowledgeNode with no matching relation for a requested
+    /// edge contributes no entries at all. A terminal (column/attribute/media) that fails to
+    /// resolve once a node is reached is reported per entry in <c>errors</c>, same as
+    /// <c>POST /nodes/resolve</c>, without discarding the entry or its other paths. Empty array if
+    /// the NodeType has no KnowledgeNodes, or if none of its nodes matched every requested edge.
     /// </response>
     /// <response code="400">
     /// <c>nodeTypeName</c> or <c>paths</c> was missing/empty, or a path isn't valid Path DSL syntax.
@@ -180,8 +191,8 @@ public class KnowledgeNodesController : ControllerBase
         var nodes = await _repository.GetAllAsync(request.NodeTypeName!);
         if (nodes.Count == 0 && !await NodeTypeExistsAsync(request.NodeTypeName!)) return NotFound();
 
-        var items = nodes.Select(n => new ResolvePathsRequestItem(n.Id, request.Paths)).ToList();
-        return Ok(await ResolveItemsAsync(items));
+        var rows = await _pathTreeResolutionRepository.ResolveTreeAsync(nodes.Select(n => n.Id).ToList(), request.Paths!);
+        return Ok(rows.Select(r => new ResolvedNodePaths(r.NodeId, r.Properties, r.Errors)).ToList());
     }
 
     private async Task<bool> NodeTypeExistsAsync(string nodeTypeName) =>

@@ -1010,24 +1010,81 @@
     `KnowledgeNodeMedia` bullet above for why that one clones too, even though its own override is
     a no-op today).
 - **`POST /nodes/resolve/type`** resolves the same batch of Property Path DSL expressions against
-  every `KnowledgeNode` of a named NodeType in one call — equivalent to `GET
-  /nodes?nodeTypeName=...` fed straight into `POST /nodes/resolve` with the same path list repeated
-  per node, but server-side in one round trip. Request:
-  `ResolveByNodeTypeRequest(string? NodeTypeName, List<string>? Paths)` (`Api/Contracts/
-  ResolveByNodeTypeRequest.cs`), both `[Required]`, `Paths` reusing the same
-  `[MinLength(1), ValidPathExpression]` as `POST /nodes/resolve`'s `ResolvePathsRequestItem`.
-  Response is the exact same `List<ResolvedNodePaths>` shape `POST /nodes/resolve` returns.
-  `KnowledgeNodesController.ResolveByType` follows the exact same query-first ordering as `GetAll`
-  (see the `GET /nodes` bullet above) — `_repository.GetAllAsync(nodeTypeName)` first, and only
-  checks existence (the same shared `NodeTypeExistsAsync` helper, `404` on a miss) when that comes
-  back empty — before building a `ResolvePathsRequestItem` per returned node with the same `Paths`
-  and resolving through the same `ResolveItemsAsync` private helper `Resolve` itself calls (extracted
-  specifically so both resolve actions share the queries→`ResolveAsync`→cursor-walk loop instead of
-  duplicating it). Constructor needs `INodeTypeRepository` for this — it had briefly been dropped
-  when `IKnowledgeNodeRepository
-  .GetAllAsync` first became name-based (nothing in the controller needed it at that point), then
-  reinstated once the `404`-vs-`200 []` distinction was added, first to this action and then to
-  `GetAll` too.
+  every `KnowledgeNode` of a named NodeType in one call. Request shape
+  (`ResolveByNodeTypeRequest(string? NodeTypeName, List<string>? Paths)`,
+  `Api/Contracts/ResolveByNodeTypeRequest.cs`) and query-first-then-`404`-on-empty ordering are
+  unchanged from the original design (see the `GET /nodes` bullet above for that ordering pattern) —
+  `_repository.GetAllAsync(nodeTypeName)` first, `NodeTypeExistsAsync` only on an empty result.
+  **This endpoint no longer shares `KnowledgeNodesController`'s `ResolveItemsAsync` helper with
+  `POST /nodes/resolve`** — it treats the requested paths as a join tree, not independent lookups,
+  which `Resolve`/`POST /nodes/resolve` still doesn't (and was deliberately left untouched when this
+  was built, since it may not be needed depending on how this feature lands).
+  - **Paths sharing an edge prefix are resolved once and stay correlated; only genuinely independent
+    branches produce a true cartesian product against each other.** E.g. `<cityInCountry.canonicalName`
+    and `<cityInCountry>cityInState.canonicalName` share the `<cityInCountry` edge — it's traversed
+    once per matching city, and the city-level branches (its own name, and the further
+    `cityInState` edge) stay tied to that same city, never cross-multiplied against an unrelated
+    city's results.
+  - **Traversing an edge that matches zero relations kills the entire result for that starting node,
+    unconditionally**
+    — not just the branch under it. A country with zero cities contributes no rows at all, even
+    though its own `.canonicalName` would otherwise resolve fine; that value is simply discarded
+    along with the rest of the (now provably empty) cartesian product for that node. This is plain
+    cartesian-product math (an empty factor makes the whole product empty), not a special case.
+  - **A terminal (column/attribute/media) behaves differently and is why a row doesn't always
+    vanish** — once a node is actually reached, a terminal always produces exactly one outcome (a
+    value or an error), never zero outcomes, so it never zeroes out a row the way traversing an
+    edge can. A terminal failure (bad column name, missing attribute/media key, null description —
+    even at the root with zero edges traversed) surfaces per-row in `errors`, same message/shape as
+    `POST /nodes/resolve`,
+    without dropping the row or its sibling paths.
+  - **`PathTrieNode`** (`Data/PathResolution/PathTrieNode.cs`) is the join-tree data structure — a
+    dictionary of edge-keyed children (`PathEdge → PathTrieNode`, reusing `PathEdge` itself as the
+    key rather than a duplicate `(Name, Direction)` tuple, since it already has the record-generated
+    structural equality a dictionary key needs) plus a list of terminals attached exactly at that
+    node (`(Kind, Name, OriginalPathString)`). `Build` takes an already-parsed
+    `IReadOnlyDictionary<string, PathExpression>` (path string → its parsed form) and only walks/
+    creates trie nodes per edge, merging any shared prefix automatically (two paths starting with
+    the same edge just walk into the same child) — it has no parsing or DB dependency of its own,
+    pure data structure in, data structure out. Parsing happens one level up, in
+    `PathTreeResolutionRepository.ResolveTreeAsync`, the same place `PathResolutionRepository.ResolveAsync`
+    already does its own `_parser.TryParse` call — a `TryParse` failure there is unreachable in
+    production (`[ValidPathExpression]` on the request already guarantees every path parses) and
+    throws `InvalidOperationException`, matching `TerminalResolverFactory.GetResolver`'s existing
+    precedent for "this state should be impossible."
+  - **`IPathTreeResolutionRepository`/`PathTreeResolutionRepository`** (`Data/Repositories/`) is a
+    new, dedicated class — not a new method on `IPathResolutionRepository`/`PathResolutionRepository`
+    — since the shapes are fundamentally different (N nodes + M paths in → an unbounded,
+    per-node-independent number of rows out, vs. that interface's clean 1:1 query-to-result
+    contract) and adding it there would force every existing consumer/mock to carry a method it
+    doesn't use. Same 5 constructor dependencies as `PathResolutionRepository`
+    (`IAppDbContext`, `IPathExpressionParser`, `ITerminalResolverFactory`, both
+    `IQueryTransform<KnowledgeNode, KnowledgeNode>` directions) — reuses every existing
+    query-transform/terminal-resolver class unchanged, since a terminal is still guaranteed ≤1 per
+    node once the source is pinned to one concrete node id. `ResolveTreeAsync` builds the trie once,
+    then recursively evaluates it per starting node (`EvaluateNodeAsync`): edge children are
+    evaluated *before* terminals deliberately, so the moment any edge child comes back empty the
+    node's fate is already known and remaining sibling edges/terminals are skipped — a real,
+    semantically-inert efficiency win. The walk is sequential (`await`, no `Task.WhenAll`) — the
+    scoped `IAppDbContext` isn't safe for concurrent use.
+  - **This issues one small query per (node, edge-or-terminal) actually visited — chattier than "one
+    query per requested path," a deliberate, explicit tradeoff, not an oversight.** The efficient
+    alternative (thread a correlation key through composed joins so each distinct path becomes one
+    SQL query across the whole NodeType) would mean changing `IQueryTransform`/`ITerminalResolver` —
+    the same interfaces `POST /nodes/resolve` depends on — which is exactly the shared-surface risk
+    this design avoids by touching neither. Revisit only if profiling says so.
+  - **Response is still the same `List<ResolvedNodePaths>`/`ResolvedNodeRow` properties/errors
+    shape** (`Data/PathResolution/ResolvedNodeRow.cs` is the Data-layer echo of `ResolvedNodePaths`,
+    same split as `ResolvedPath`/`ResolvedNodePaths`) — just with different cardinality semantics: a
+    `nodeId` can now repeat, once per row of that node's resolved tree, and a node whose paths hit a
+    zero-match edge traversal contributes no rows at all rather than one row with blanks.
+  - **`DataServiceRegistration` registers `IPathTreeResolutionRepository` via a factory lambda**, the
+    same pattern already used for `IPathResolutionRepository` — both `ForwardNodeRelationshipQueryTransform`
+    and `BackwardNodeRelationshipQueryTransform` need to land in specific constructor slots that
+    can't be resolved through a plain `AddScoped<TInterface, TImpl>()` line.
+  - `KnowledgeNodesController`'s constructor gained a fourth dependency,
+    `IPathTreeResolutionRepository`, alongside (not replacing) `IPathResolutionRepository` — `Resolve`
+    and its private `ResolveItemsAsync` helper are unchanged and still use the latter.
 
 ## API documentation (Swagger)
 - `<GenerateDocumentationFile>`/`<NoWarn>1591</NoWarn>` are set in both `MnemoToad.Knowledge.Api.csproj`
@@ -1188,6 +1245,22 @@
     mapper throwing the full `"The media entry '...'"` message surfaces from `CreateAsync`/
     `UpdateAsync` byte-for-byte) — deliberately not re-asserting extraction rules a mocked mapper
     can't exercise anyway.
+  - **`PathTreeResolutionRepository` follows the same dual-location split, plus a third, pure
+    no-DB layer for the trie itself.** `PathResolution/PathTrieNodeTests.cs` tests `PathTrieNode.Build`
+    directly (shared-prefix merging, disjoint children for forward vs. backward edges of the same
+    name, terminal attachment) with no DB and no repository involved.
+    `Repositories/PathTreeResolutionRepositoryTests.cs` mocks every collaborator (`IPathExpressionParser`,
+    both `IQueryTransform<KnowledgeNode, KnowledgeNode>` directions, `ITerminalResolverFactory`/
+    `ITerminalResolver`) and asserts pure dispatch/composition: an edge transform returning zero ids
+    yields zero rows for the whole node even with a resolvable sibling terminal (and — locking in the
+    edge-children-before-terminals evaluation order — that `ITerminalResolverFactory.GetResolver` is
+    never even called in that case), a terminal failure produces a per-row error without dropping the
+    row, and two independent edge children cross-product their fragment counts. `Components/
+    PathTreeResolutionRepositoryTests.cs` wires the real parser/resolvers/transforms against
+    `MockableAppDbContext`, covering genuine end-to-end behavior the mocked version can't — the
+    Country/City/State example from the `POST /nodes/resolve/type` bullet above, built verbatim, plus
+    a forward/backward symmetry test asserting `<cityInCountry` from the country side and
+    `>cityInCountry` from the city side produce identical (city, country) pairs.
   - **System tests** (`MnemoToad.Knowledge.Tests/SystemTests/`) send real HTTP requests through the full app
     pipeline via `WebApplicationFactory<Program>` — see below.
 - `[SetUp]` creates a fresh mock/context/factory per test (not shared/static state), so tests can't

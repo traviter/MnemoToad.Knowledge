@@ -16,6 +16,7 @@ public class KnowledgeNodesControllerTests
 {
     private Mock<IKnowledgeNodeRepository> _repository = null!;
     private Mock<IPathResolutionRepository> _pathResolutionRepository = null!;
+    private Mock<IPathTreeResolutionRepository> _pathTreeResolutionRepository = null!;
     private Mock<INodeTypeRepository> _nodeTypeRepository = null!;
     private KnowledgeNodesController _controller = null!;
 
@@ -24,8 +25,10 @@ public class KnowledgeNodesControllerTests
     {
         _repository = new Mock<IKnowledgeNodeRepository>();
         _pathResolutionRepository = new Mock<IPathResolutionRepository>();
+        _pathTreeResolutionRepository = new Mock<IPathTreeResolutionRepository>();
         _nodeTypeRepository = new Mock<INodeTypeRepository>();
-        _controller = new KnowledgeNodesController(_repository.Object, _pathResolutionRepository.Object, _nodeTypeRepository.Object);
+        _controller = new KnowledgeNodesController(_repository.Object, _pathResolutionRepository.Object,
+            _pathTreeResolutionRepository.Object, _nodeTypeRepository.Object);
     }
 
     private List<string> TrackNodeThenNodeTypeQueryOrder(string nodeTypeName, List<KnowledgeNode> nodes, List<NodeType> nodeTypes)
@@ -358,9 +361,10 @@ public class KnowledgeNodesControllerTests
             new() { Id = Guid.NewGuid(), NodeTypeId = nodeTypeId, CanonicalName = "Germany" },
         };
         _repository.Setup(r => r.GetAllAsync("Country")).ReturnsAsync(nodes);
-        _pathResolutionRepository.Setup(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()))
-            .ReturnsAsync((IReadOnlyList<PathResolutionQuery> queries) => queries
-                .Select(q => new ResolvedPath(q.NodeId, q.Path, JsonValue.Create($"value-for-{q.Path}"), null))
+        _pathTreeResolutionRepository
+            .Setup(r => r.ResolveTreeAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<string>>()))
+            .ReturnsAsync((IReadOnlyList<Guid> nodeIds, IReadOnlyList<string> paths) => nodeIds
+                .Select(id => new ResolvedNodeRow(id, paths.ToDictionary(p => p, p => (JsonNode?)JsonValue.Create($"value-for-{p}")), null))
                 .ToList());
 
         var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName", ".population"]));
@@ -371,8 +375,32 @@ public class KnowledgeNodesControllerTests
         Assert.That(results, Has.Count.EqualTo(2));
         Assert.That(results!.Select(r => r.NodeId), Is.EquivalentTo(nodes.Select(n => n.Id)));
         Assert.That(results[0].Properties.Keys, Is.EquivalentTo(new[] { "_canonicalName", ".population" }));
-        _pathResolutionRepository.Verify(r => r.ResolveAsync(It.Is<IReadOnlyList<PathResolutionQuery>>(q => q.Count == 4)), Times.Once);
+        _pathTreeResolutionRepository.Verify(r => r.ResolveTreeAsync(
+            It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 2), It.Is<IReadOnlyList<string>>(p => p.Count == 2)), Times.Once);
         _nodeTypeRepository.Verify(r => r.GetAllAsync(), Times.Never);
+    }
+
+    [Test]
+    public async Task ResolveByType_TreeRepositoryReturnsMultipleRowsForSameNode_ReturnsThemAllUnmerged()
+    {
+        var nodeId = Guid.NewGuid();
+        _repository.Setup(r => r.GetAllAsync("Country"))
+            .ReturnsAsync([new() { Id = nodeId, CanonicalName = "France" }]);
+        _pathTreeResolutionRepository
+            .Setup(r => r.ResolveTreeAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<string>>()))
+            .ReturnsAsync(
+            [
+                new ResolvedNodeRow(nodeId, new Dictionary<string, JsonNode?> { ["<cityInCountry.canonicalName"] = JsonValue.Create("Paris") }, null),
+                new ResolvedNodeRow(nodeId, new Dictionary<string, JsonNode?> { ["<cityInCountry.canonicalName"] = JsonValue.Create("Lyon") }, null),
+            ]);
+
+        var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["<cityInCountry.canonicalName"]));
+
+        var results = (result as OkObjectResult)!.Value as List<ResolvedNodePaths>;
+        Assert.That(results, Has.Count.EqualTo(2));
+        Assert.That(results!.Select(r => r.NodeId), Is.All.EqualTo(nodeId));
+        Assert.That(results.Select(r => r.Properties["<cityInCountry.canonicalName"]!.GetValue<string>()),
+            Is.EquivalentTo(new[] { "Paris", "Lyon" }));
     }
 
     [Test]
@@ -380,13 +408,16 @@ public class KnowledgeNodesControllerTests
     {
         var callOrder = TrackNodeThenNodeTypeQueryOrder("Country", new List<KnowledgeNode>(),
             new List<NodeType> { new() { Id = Guid.NewGuid(), Name = "Country" } });
+        _pathTreeResolutionRepository
+            .Setup(r => r.ResolveTreeAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<string>>()))
+            .ReturnsAsync([]);
 
         var result = await _controller.ResolveByType(new ResolveByNodeTypeRequest("Country", ["_canonicalName"]));
 
         var results = (result as OkObjectResult)!.Value as List<ResolvedNodePaths>;
         Assert.That(results, Is.Empty);
         Assert.That(callOrder, Is.EqualTo(new[] { "nodes", "nodeTypes" }));
-        _pathResolutionRepository.Verify(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()), Times.Once);
+        _pathTreeResolutionRepository.Verify(r => r.ResolveTreeAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<string>>()), Times.Once);
     }
 
     [Test]
@@ -398,6 +429,6 @@ public class KnowledgeNodesControllerTests
 
         Assert.That(result, Is.InstanceOf<NotFoundResult>());
         Assert.That(callOrder, Is.EqualTo(new[] { "nodes", "nodeTypes" }));
-        _pathResolutionRepository.Verify(r => r.ResolveAsync(It.IsAny<IReadOnlyList<PathResolutionQuery>>()), Times.Never);
+        _pathTreeResolutionRepository.Verify(r => r.ResolveTreeAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<string>>()), Times.Never);
     }
 }

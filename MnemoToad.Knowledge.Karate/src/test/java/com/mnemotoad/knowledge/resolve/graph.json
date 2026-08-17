@@ -1,11 +1,14 @@
 {
   "nodeTypes": [
     { "id": "11111111-1111-1111-1111-111111111111", "name": "ZZ_Karate_Resolve_NodeType" },
-    { "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "name": "ZZ_Karate_Resolve_EmptyNodeType" }
+    { "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "name": "ZZ_Karate_Resolve_EmptyNodeType" },
+    { "id": "b0000000-0000-0000-0000-000000000000", "name": "ZZ_Karate_Resolve_PlaceType" }
   ],
   "relationshipTypes": [
     { "id": "22222222-2222-2222-2222-222222222222", "name": "ZZKarateResolveCapital" },
-    { "id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "name": "ZZKarateResolveLocatedIn" }
+    { "id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "name": "ZZKarateResolveLocatedIn" },
+    { "id": "b8888888-8888-8888-8888-888888888888", "name": "ZZKarateResolveCityInCountry" },
+    { "id": "b9999999-9999-9999-9999-999999999999", "name": "ZZKarateResolveCityInState" }
   ],
   "mediaAssets": [
     { "id": "33333333-3333-3333-3333-333333333333", "url": "https://example.test/flag.svg" },
@@ -33,6 +36,41 @@
       "nodeTypeId": "11111111-1111-1111-1111-111111111111",
       "canonicalName": "ZZ_Karate_Resolve_IsolatedNode",
       "attributes": { "population": 500000 }
+    },
+    {
+      "id": "b1111111-1111-1111-1111-111111111111",
+      "nodeTypeId": "b0000000-0000-0000-0000-000000000000",
+      "canonicalName": "ZZ_Karate_Resolve_France"
+    },
+    {
+      "id": "b2222222-2222-2222-2222-222222222222",
+      "nodeTypeId": "b0000000-0000-0000-0000-000000000000",
+      "canonicalName": "ZZ_Karate_Resolve_Germany"
+    },
+    {
+      "id": "b3333333-3333-3333-3333-333333333333",
+      "nodeTypeId": "b0000000-0000-0000-0000-000000000000",
+      "canonicalName": "ZZ_Karate_Resolve_Paris"
+    },
+    {
+      "id": "b4444444-4444-4444-4444-444444444444",
+      "nodeTypeId": "b0000000-0000-0000-0000-000000000000",
+      "canonicalName": "ZZ_Karate_Resolve_Lyon"
+    },
+    {
+      "id": "b5555555-5555-5555-5555-555555555555",
+      "nodeTypeId": "b0000000-0000-0000-0000-000000000000",
+      "canonicalName": "ZZ_Karate_Resolve_Marseille"
+    },
+    {
+      "id": "b6666666-6666-6666-6666-666666666666",
+      "nodeTypeId": "b0000000-0000-0000-0000-000000000000",
+      "canonicalName": "ZZ_Karate_Resolve_IleDeFrance"
+    },
+    {
+      "id": "b7777777-7777-7777-7777-777777777777",
+      "nodeTypeId": "b0000000-0000-0000-0000-000000000000",
+      "canonicalName": "ZZ_Karate_Resolve_AuvergneRhoneAlpes"
     }
   ],
   "knowledgeRelations": [
@@ -53,6 +91,36 @@
       "sourceNodeId": "88888888-8888-8888-8888-888888888888",
       "relationshipTypeId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
       "targetNodeId": "66666666-6666-6666-6666-666666666666"
+    },
+    {
+      "id": "c1111111-1111-1111-1111-111111111111",
+      "sourceNodeId": "b3333333-3333-3333-3333-333333333333",
+      "relationshipTypeId": "b8888888-8888-8888-8888-888888888888",
+      "targetNodeId": "b1111111-1111-1111-1111-111111111111"
+    },
+    {
+      "id": "c2222222-2222-2222-2222-222222222222",
+      "sourceNodeId": "b4444444-4444-4444-4444-444444444444",
+      "relationshipTypeId": "b8888888-8888-8888-8888-888888888888",
+      "targetNodeId": "b1111111-1111-1111-1111-111111111111"
+    },
+    {
+      "id": "c3333333-3333-3333-3333-333333333333",
+      "sourceNodeId": "b5555555-5555-5555-5555-555555555555",
+      "relationshipTypeId": "b8888888-8888-8888-8888-888888888888",
+      "targetNodeId": "b1111111-1111-1111-1111-111111111111"
+    },
+    {
+      "id": "c4444444-4444-4444-4444-444444444444",
+      "sourceNodeId": "b3333333-3333-3333-3333-333333333333",
+      "relationshipTypeId": "b9999999-9999-9999-9999-999999999999",
+      "targetNodeId": "b6666666-6666-6666-6666-666666666666"
+    },
+    {
+      "id": "c5555555-5555-5555-5555-555555555555",
+      "sourceNodeId": "b4444444-4444-4444-4444-444444444444",
+      "relationshipTypeId": "b9999999-9999-9999-9999-999999999999",
+      "targetNodeId": "b7777777-7777-7777-7777-777777777777"
     }
   ]
 }

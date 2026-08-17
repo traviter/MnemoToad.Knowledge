@@ -76,7 +76,8 @@ public class KnowledgeNodesControllerResolveSystemTests
 
     private static readonly string[] ResolveByTypeSuccessCases =
     [
-        "resolve-by-type", "resolve-by-type-multi-hop", "resolve-by-type-partial-results", "resolve-by-type-empty-type"
+        "resolve-by-type", "resolve-by-type-multi-hop", "resolve-by-type-partial-results", "resolve-by-type-empty-type",
+        "resolve-by-type-cartesian-shared-prefix"
     ];
 
     [TestCaseSource(nameof(ResolveByTypeSuccessCases))]
@@ -89,15 +90,18 @@ public class KnowledgeNodesControllerResolveSystemTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var actual = JsonNode.Parse(await response.Content.ReadAsStringAsync());
         var expected = testCase["response"];
-        // GetAllAsync no longer orders its results, so compare by nodeId regardless of array order.
-        Assert.That(JsonNode.DeepEquals(SortByNodeId(actual), SortByNodeId(expected)), Is.True,
+        // GetAllAsync no longer orders its results, and a nodeId can now legitimately repeat across
+        // several rows with different content, so sort by the full row content, not nodeId alone.
+        Assert.That(JsonNode.DeepEquals(SortRows(actual), SortRows(expected)), Is.True,
             $"Expected:\n{expected}\nActual:\n{actual}");
     }
 
-    private static JsonNode SortByNodeId(JsonNode? node)
+    private static JsonNode SortRows(JsonNode? node)
     {
         var sorted = new JsonArray();
-        foreach (var item in node!.AsArray().OrderBy(item => item!["nodeId"]!.GetValue<string>()))
+        foreach (var item in node!.AsArray()
+            .OrderBy(item => item!["nodeId"]!.GetValue<string>())
+            .ThenBy(item => item!.ToJsonString()))
             sorted.Add(item!.DeepClone());
         return sorted;
     }

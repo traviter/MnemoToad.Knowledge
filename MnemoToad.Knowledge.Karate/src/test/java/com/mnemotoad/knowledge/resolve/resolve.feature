@@ -55,11 +55,12 @@ Feature: Resolve Property Path DSL expressions against KnowledgeNodes
     And match response contains only testCase.response
 
     Examples:
-      | case                              |
-      | resolve-by-type                   |
-      | resolve-by-type-multi-hop         |
-      | resolve-by-type-partial-results   |
-      | resolve-by-type-empty-type        |
+      | case                                 |
+      | resolve-by-type                      |
+      | resolve-by-type-multi-hop            |
+      | resolve-by-type-partial-results      |
+      | resolve-by-type-empty-type           |
+      | resolve-by-type-cartesian-shared-prefix |
 
   Scenario: Resolve by type with an unknown NodeType name returns 404
     * def testCase = read('cases/resolve-by-type-unknown-name.json')

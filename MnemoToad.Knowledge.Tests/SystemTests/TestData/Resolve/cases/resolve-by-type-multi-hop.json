@@ -5,14 +5,6 @@
   },
   "response": [
     {
-      "nodeId": "88888888-8888-8888-8888-888888888888",
-      "properties": {},
-      "errors": {
-        ">ZZKarateResolveCapital_canonicalName": "Path could not be resolved.",
-        ">ZZKarateResolveCapital.population": "Path could not be resolved."
-      }
-    },
-    {
       "nodeId": "55555555-5555-5555-5555-555555555555",
       "properties": {
         ">ZZKarateResolveCapital_canonicalName": "ZZ_Karate_Resolve_TargetNode",
