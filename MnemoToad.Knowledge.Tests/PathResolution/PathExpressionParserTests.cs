@@ -48,7 +48,7 @@ public class PathExpressionParserTests
         var result = _parser.TryParse(">capital_canonicalName", out var expression);
 
         Assert.That(result, Is.True);
-        Assert.That(expression!.Edges, Is.EqualTo(new[] { "capital" }));
+        Assert.That(expression!.Edges, Is.EqualTo(new[] { new PathEdge("capital", PathEdgeDirection.Forward) }));
         Assert.That(expression.TerminalKind, Is.EqualTo(PathTerminalKind.Column));
         Assert.That(expression.TerminalName, Is.EqualTo("canonicalName"));
     }
@@ -59,8 +59,53 @@ public class PathExpressionParserTests
         var result = _parser.TryParse(">partOf>partOf_canonicalName", out var expression);
 
         Assert.That(result, Is.True);
-        Assert.That(expression!.Edges, Is.EqualTo(new[] { "partOf", "partOf" }));
+        Assert.That(expression!.Edges, Is.EqualTo(new[]
+        {
+            new PathEdge("partOf", PathEdgeDirection.Forward),
+            new PathEdge("partOf", PathEdgeDirection.Forward)
+        }));
         Assert.That(expression.TerminalName, Is.EqualTo("canonicalName"));
+    }
+
+    [Test]
+    public void TryParse_OneBackwardEdgeThenColumn_Succeeds()
+    {
+        var result = _parser.TryParse("<capital_canonicalName", out var expression);
+
+        Assert.That(result, Is.True);
+        Assert.That(expression!.Edges, Is.EqualTo(new[] { new PathEdge("capital", PathEdgeDirection.Backward) }));
+        Assert.That(expression.TerminalKind, Is.EqualTo(PathTerminalKind.Column));
+        Assert.That(expression.TerminalName, Is.EqualTo("canonicalName"));
+    }
+
+    [Test]
+    public void TryParse_MixedForwardAndBackwardEdges_Succeeds()
+    {
+        var result = _parser.TryParse(">partOf<capital_canonicalName", out var expression);
+
+        Assert.That(result, Is.True);
+        Assert.That(expression!.Edges, Is.EqualTo(new[]
+        {
+            new PathEdge("partOf", PathEdgeDirection.Forward),
+            new PathEdge("capital", PathEdgeDirection.Backward)
+        }));
+        Assert.That(expression.TerminalName, Is.EqualTo("canonicalName"));
+    }
+
+    [Test]
+    public void TryParse_BackwardEdgeWithNoTerminal_Fails()
+    {
+        var result = _parser.TryParse("<capital", out _);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void TryParse_BackwardEdgeNameContainingReservedCharacter_Fails()
+    {
+        var result = _parser.TryParse("<a_b.value", out _);
+
+        Assert.That(result, Is.False);
     }
 
     [Test]

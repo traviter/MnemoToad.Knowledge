@@ -4,7 +4,8 @@
     { "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "name": "ZZ_Karate_Resolve_EmptyNodeType" }
   ],
   "relationshipTypes": [
-    { "id": "22222222-2222-2222-2222-222222222222", "name": "ZZKarateResolveCapital" }
+    { "id": "22222222-2222-2222-2222-222222222222", "name": "ZZKarateResolveCapital" },
+    { "id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "name": "ZZKarateResolveLocatedIn" }
   ],
   "mediaAssets": [
     { "id": "33333333-3333-3333-3333-333333333333", "url": "https://example.test/flag.svg" },
@@ -46,6 +47,12 @@
       "sourceNodeId": "66666666-6666-6666-6666-666666666666",
       "relationshipTypeId": "22222222-2222-2222-2222-222222222222",
       "targetNodeId": "55555555-5555-5555-5555-555555555555"
+    },
+    {
+      "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "sourceNodeId": "88888888-8888-8888-8888-888888888888",
+      "relationshipTypeId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "targetNodeId": "66666666-6666-6666-6666-666666666666"
     }
   ]
 }

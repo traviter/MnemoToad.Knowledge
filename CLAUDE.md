@@ -77,7 +77,7 @@
   `KnowledgeNodeMediaJsonMapper` (pure functions over its parameters, no fields) and
   `IPathExpressionParser`/`PathExpressionParser` (only `static readonly` compiled regexes) — everything
   else stays `AddScoped`.** The six repositories, `ITerminalResolverFactory`/`TerminalResolverFactory`,
-  and `IQueryTransform<KnowledgeNode, KnowledgeNode>`/`NodeRelationshipQueryTransform` all take
+  and `ForwardNodeRelationshipQueryTransform`/`BackwardNodeRelationshipQueryTransform` all take
   `IAppDbContext` directly (or, for `PathResolutionRepository`, transitively through
   `ITerminalResolverFactory`) — `IAppDbContext`/`AppDbContext` itself has to stay scoped (a `DbContext`
   isn't safe to share across concurrent requests), so anything depending on it, directly or
@@ -907,35 +907,63 @@
 - **Path Resolution (`POST /nodes/resolve`)** resolves a batch of Property Path DSL expressions
   against `KnowledgeNode`s in one call — e.g. `>capital>capitalOf_canonicalName` walks two edges
   then reads a column, `.population` reads an attribute directly off the starting node, `#flag`
-  reads a media entry. Grammar: zero or more `>edgeName` hops, then exactly one terminal marker —
-  `_columnName` (a `KnowledgeNode` column), `.attributeName`, or `#mediaKey`.
+  reads a media entry. Grammar: zero or more `>edgeName`/`<edgeName` hops, then exactly one terminal
+  marker — `_columnName` (a `KnowledgeNode` column), `.attributeName`, or `#mediaKey`. Direction is
+  per-hop, so a path can mix them, e.g. `>partOf<capital_canonicalName`.
   - **Everything lives under `MnemoToad.Knowledge.Data/`, split into four sibling
     namespaces/folders** (deliberately not nested inside each other, even where one is
     conceptually "for" another): `PathResolution/` (the DSL model only — `PathExpression`,
     `PathExpressionParser`/`IPathExpressionParser`, `PathResolutionQuery`, `ResolvedPath`),
     `TerminalResolvers/` (`ITerminalResolver` + `ColumnTerminalResolver`/`AttributeTerminalResolver`/
     `MediaTerminalResolver` + `ITerminalResolverFactory`/`TerminalResolverFactory`),
-    `QueryTransforms/` (`IQueryTransform<TSource, TDestination>` + `NodeRelationshipQueryTransform`/
-    `AttributeQueryTransform`/`MediaQueryTransform` — no `ColumnQueryTransform`; it was a pure
-    identity no-op once spotted and was removed rather than kept for uniformity), and `Common/`
+    `QueryTransforms/` (`IQueryTransform<TSource, TDestination>` +
+    `Forward`/`BackwardNodeRelationshipQueryTransform`/`AttributeQueryTransform`/
+    `MediaQueryTransform` — no `ColumnQueryTransform`; it was a pure identity no-op once spotted and
+    was removed rather than kept for uniformity), and `Common/`
     (`Result<T>`/`Error` — see below). `Repositories/PathResolutionRepository.cs` is the only piece
     that stays in `Repositories/`, since it's the one actually registered as `IPathResolutionRepository`.
   - **One DB round trip per path, not one per edge.** `PathResolutionRepository.TraversePathToNode`
     builds a single composed `IQueryable<KnowledgeNode>` by seeding from the starting node and
-    folding `IQueryTransform<KnowledgeNode, KnowledgeNode>.Transform` over each edge name in turn —
-    nothing executes until the terminal resolver finally awaits it, so an N-edge path is one SQL
-    statement with N join pairs, not N+1 round trips (an earlier version genuinely did one query
-    per hop plus a separate up-front existence check). `NodeRelationshipQueryTransform` (in
-    `QueryTransforms/`) is what one edge actually does: join `KnowledgeRelation` → `RelationshipType`
-    filtered by name → back to `KnowledgeNode`.
-  - **Edges only match forward, via `RelationshipType.Name`.** A separate `InverseName` column
-    existed briefly (matching an edge against it was an implicit same-token fallback for reverse
-    traversal) and was removed deliberately, not lost by accident — it was never actually meant to
-    work that way, and the column itself was dropped from `relationship_type` (scripts `008`/`013`
-    edited in place, not appended to — both were still local-only at the time). Reverse traversal
-    is planned for a future iteration, reusing the same `Name` column (traversing a matched edge
-    backward) rather than a second name column, behind its own explicit grammar token, not a silent
-    fallback on the forward one.
+    folding `IQueryTransform<KnowledgeNode, KnowledgeNode>.Transform` over each edge in turn (picking
+    the forward or backward transform per `PathEdge.Direction` — see below) — nothing executes until
+    the terminal resolver finally awaits it, so an N-edge path is one SQL statement with N join
+    pairs, not N+1 round trips (an earlier version genuinely did one query per hop plus a separate
+    up-front existence check). `ForwardNodeRelationshipQueryTransform`/
+    `BackwardNodeRelationshipQueryTransform` (in `QueryTransforms/`) are what one edge actually does:
+    join `KnowledgeRelation` → `RelationshipType` filtered by name → back to `KnowledgeNode`, just in
+    opposite directions.
+  - **Edges match both directions via the same `RelationshipType.Name` column — `>edgeName` forward,
+    `<edgeName` backward — never a second name column.** A separate `InverseName` column existed
+    briefly (matching an edge against it was an implicit same-token fallback for reverse traversal)
+    and was removed deliberately, not lost by accident — it was never actually meant to work that
+    way, and the column itself was dropped from `relationship_type` (scripts `008`/`013` edited in
+    place, not appended to — both were still local-only at the time). `<` is its own explicit
+    grammar token rather than a silent fallback on `>`, matching the original intent behind removing
+    `InverseName`. `PathExpression.Edges` is `IReadOnlyList<PathEdge>`, a `record PathEdge(string
+    Name, PathEdgeDirection Direction)` (`PathEdgeDirection` is `Forward`/`Backward`) —
+    `PathExpressionParser`'s two regexes both use a `[<>]` character class instead of a literal `>`,
+    with `EdgePattern` capturing which character matched each hop so the parser can build the right
+    `PathEdgeDirection` per edge.
+  - **Two sibling classes implement `IQueryTransform<KnowledgeNode, KnowledgeNode>` —
+    `ForwardNodeRelationshipQueryTransform` (the original `NodeRelationshipQueryTransform`, renamed)
+    and `BackwardNodeRelationshipQueryTransform` — rather than one class taking a direction
+    parameter.** Both keep the interface's plain `Transform(source, name)` signature (no direction
+    parameter added to the shared interface, so `Attribute`/`MediaQueryTransform`, the interface's
+    other two implementers, are untouched); `BackwardNodeRelationshipQueryTransform`'s join is the
+    mirror image of the forward one (`n.Id equals r.TargetNodeId`, selecting `r.SourceNodeId`,
+    same `RelationshipType.Name` filter). `PathResolutionRepository` takes both as two separate
+    `IQueryTransform<KnowledgeNode, KnowledgeNode>` constructor parameters
+    (`forwardEdgeQueryTransform`/`backwardEdgeQueryTransform`) and picks per hop based on
+    `PathEdge.Direction` inside `TraversePathToNode` — still folds into one composed queryable per
+    path, no new DB round trips per hop regardless of direction.
+    **Two implementations of the same interface can't both bind via the usual one-line
+    `services.AddScoped<IQueryTransform<KnowledgeNode, KnowledgeNode>, TImpl>()`** (the container
+    would just keep the last registration), so `DataServiceRegistration` registers each concrete
+    class under itself (`AddScoped<ForwardNodeRelationshipQueryTransform>()`/
+    `AddScoped<BackwardNodeRelationshipQueryTransform>()`) and builds `IPathResolutionRepository`
+    via a factory lambda that resolves both concrete instances and passes them positionally into
+    `PathResolutionRepository`'s constructor — the only registration in `DataServiceRegistration`
+    that isn't a plain `AddScoped<TInterface, TImpl>()` one-liner, for exactly this reason.
   - **Every DB-driven failure — missing node, an edge with no matching relation, a missing terminal
     attribute/media key — returns the same generic `"Path could not be resolved."` message,
     deliberately not distinguishing which stage failed.** That's what let the whole per-hop lookup
@@ -953,12 +981,13 @@
     `IServiceProvider` service-locator call), keyed by `PathTerminalKind`; `GetResolver` throws
     `InvalidOperationException` rather than returning null for an unregistered kind, since that
     state should be unreachable given the enum is closed and every value is wired up.
-    `PathResolutionRepository` itself takes `IQueryTransform<KnowledgeNode, KnowledgeNode>` as a
-    fourth constructor parameter (`DataServiceRegistration.cs` has a matching
-    `AddScoped<IQueryTransform<KnowledgeNode, KnowledgeNode>, NodeRelationshipQueryTransform>()`
-    line) rather than constructing `NodeRelationshipQueryTransform` internally — a deliberate
-    reversal of the original "minimize API registration surface" call, made specifically so
-    `PathResolutionRepositoryTests` (see "Testing" below) could mock every one of its
+    `PathResolutionRepository` itself takes two `IQueryTransform<KnowledgeNode, KnowledgeNode>`
+    constructor parameters, forward and backward (see the edge-direction bullet above for why it's
+    two interface-typed parameters rather than one class with a direction argument, and why
+    `DataServiceRegistration.cs` wires `IPathResolutionRepository` via a factory lambda instead of a
+    plain `AddScoped<TInterface, TImpl>()` line) rather than constructing the transforms internally
+    — a deliberate reversal of the original "minimize API registration surface" call, made
+    specifically so `PathResolutionRepositoryTests` (see "Testing" below) could mock every one of its
     collaborators instead of needing a real DB for the repository-level test.
   - **`Result<T>`/`Error`** (`MnemoToad.Knowledge.Data/Common/`) is a small closed discriminated
     union — `Result<T>.Success(T Value)` / `Result<T>.Failure(string Message)`, base constructor
@@ -1053,8 +1082,8 @@
     `PathResolutionRepositoryTests`, moved here from `Repositories/` once `PathResolutionRepository`
     stopped being testable in isolation the way the other five repositories are. **Nothing is mocked
     except the DB** — a real `PathExpressionParser`, a real `TerminalResolverFactory` (which itself
-    builds real `ColumnTerminalResolver`/`AttributeTerminalResolver`/`MediaTerminalResolver`), and a
-    real `NodeRelationshipQueryTransform`, all wired to the same SQLite in-memory
+    builds real `ColumnTerminalResolver`/`AttributeTerminalResolver`/`MediaTerminalResolver`), and
+    real `Forward`/`BackwardNodeRelationshipQueryTransform` instances, all wired to the same SQLite in-memory
     `MockableAppDbContext` the repository layer uses (still no HTTP). This is a reversal of an
     earlier version that still mocked `IPathExpressionParser` here, reasoning that parsing is a pure
     function already covered by `PathExpressionParserTests` — that left this layer unable to catch a

@@ -3,11 +3,11 @@ using MnemoToad.Knowledge.Data.Entities;
 
 namespace MnemoToad.Knowledge.Data.QueryTransforms;
 
-public class NodeRelationshipQueryTransform : IQueryTransform<KnowledgeNode, KnowledgeNode>
+public class ForwardNodeRelationshipQueryTransform : IQueryTransform<KnowledgeNode, KnowledgeNode>
 {
     private readonly IAppDbContext _db;
 
-    public NodeRelationshipQueryTransform(IAppDbContext db) => _db = db;
+    public ForwardNodeRelationshipQueryTransform(IAppDbContext db) => _db = db;
 
     public IQueryable<KnowledgeNode> Transform(IQueryable<KnowledgeNode> source, string name) =>
         from n in source

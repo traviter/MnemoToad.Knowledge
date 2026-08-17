@@ -18,7 +18,8 @@ public class PathResolutionRepositoryTests
     private Mock<IAppDbContext> _db = null!;
     private Mock<IPathExpressionParser> _parser = null!;
     private Mock<ITerminalResolverFactory> _terminalResolverFactory = null!;
-    private Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>> _edgeQueryTransform = null!;
+    private Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>> _forwardEdgeQueryTransform = null!;
+    private Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>> _backwardEdgeQueryTransform = null!;
     private Mock<ITerminalResolver> _resolver = null!;
     private PathResolutionRepository _repository = null!;
 
@@ -29,12 +30,17 @@ public class PathResolutionRepositoryTests
         _db.Setup(d => d.KnowledgeNode).Returns(new List<KnowledgeNode>().BuildMockDbSet().Object);
         _parser = new Mock<IPathExpressionParser>();
         _terminalResolverFactory = new Mock<ITerminalResolverFactory>();
-        _edgeQueryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>>();
-        _edgeQueryTransform
+        _forwardEdgeQueryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>>();
+        _forwardEdgeQueryTransform
+            .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()))
+            .Returns((IQueryable<KnowledgeNode> source, string _) => source);
+        _backwardEdgeQueryTransform = new Mock<IQueryTransform<KnowledgeNode, KnowledgeNode>>();
+        _backwardEdgeQueryTransform
             .Setup(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()))
             .Returns((IQueryable<KnowledgeNode> source, string _) => source);
         _resolver = new Mock<ITerminalResolver>();
-        _repository = new PathResolutionRepository(_db.Object, _parser.Object, _terminalResolverFactory.Object, _edgeQueryTransform.Object);
+        _repository = new PathResolutionRepository(_db.Object, _parser.Object, _terminalResolverFactory.Object,
+            _forwardEdgeQueryTransform.Object, _backwardEdgeQueryTransform.Object);
     }
 
     private void SetupParse(string path, PathExpression? expression) =>
@@ -62,7 +68,8 @@ public class PathResolutionRepositoryTests
         Assert.That(result.Value, Is.Null);
         Assert.That(result.Error, Is.EqualTo("Invalid Path DSL syntax."));
         _terminalResolverFactory.Verify(f => f.GetResolver(It.IsAny<PathTerminalKind>()), Times.Never);
-        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
+        _forwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
+        _backwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
     }
 
     [Test]
@@ -77,7 +84,8 @@ public class PathResolutionRepositoryTests
         Assert.That(result.Error, Is.Null);
         Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("France"));
         _terminalResolverFactory.Verify(f => f.GetResolver(PathTerminalKind.Column), Times.Once);
-        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
+        _forwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
+        _backwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
     }
 
     [Test]
@@ -121,14 +129,46 @@ public class PathResolutionRepositoryTests
     [Test]
     public async Task ResolveAsync_WithEdges_CallsEdgeTransformOncePerEdgeInOrder()
     {
-        SetupParse(">continent>country_canonicalName", new PathExpression(["continent", "country"], PathTerminalKind.Column, "canonicalName"));
+        SetupParse(">continent>country_canonicalName", new PathExpression(
+            [new PathEdge("continent", PathEdgeDirection.Forward), new PathEdge("country", PathEdgeDirection.Forward)],
+            PathTerminalKind.Column, "canonicalName"));
         SetupResolver(PathTerminalKind.Column, JsonValue.Create("France")!);
 
         var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), ">continent>country_canonicalName"));
 
         Assert.That(result.Error, Is.Null);
-        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "continent"), Times.Once);
-        _edgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "country"), Times.Once);
+        _forwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "continent"), Times.Once);
+        _forwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "country"), Times.Once);
+        _backwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ResolveAsync_WithBackwardEdge_CallsBackwardEdgeTransformOnly()
+    {
+        SetupParse("<capital_canonicalName", new PathExpression(
+            [new PathEdge("capital", PathEdgeDirection.Backward)], PathTerminalKind.Column, "canonicalName"));
+        SetupResolver(PathTerminalKind.Column, JsonValue.Create("France")!);
+
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), "<capital_canonicalName"));
+
+        Assert.That(result.Error, Is.Null);
+        _backwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "capital"), Times.Once);
+        _forwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ResolveAsync_WithMixedDirectionEdges_CallsEachTransformForItsOwnEdge()
+    {
+        SetupParse(">partOf<capital_canonicalName", new PathExpression(
+            [new PathEdge("partOf", PathEdgeDirection.Forward), new PathEdge("capital", PathEdgeDirection.Backward)],
+            PathTerminalKind.Column, "canonicalName"));
+        SetupResolver(PathTerminalKind.Column, JsonValue.Create("France")!);
+
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(Guid.NewGuid(), ">partOf<capital_canonicalName"));
+
+        Assert.That(result.Error, Is.Null);
+        _forwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "partOf"), Times.Once);
+        _backwardEdgeQueryTransform.Verify(t => t.Transform(It.IsAny<IQueryable<KnowledgeNode>>(), "capital"), Times.Once);
     }
 
     [Test]

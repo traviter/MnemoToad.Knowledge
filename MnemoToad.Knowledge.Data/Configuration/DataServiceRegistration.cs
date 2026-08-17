@@ -21,8 +21,14 @@ public static class DataServiceRegistration
         services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
         services.AddSingleton<IPathExpressionParser, PathExpressionParser>();
         services.AddScoped<ITerminalResolverFactory, TerminalResolverFactory>();
-        services.AddScoped<IQueryTransform<KnowledgeNode, KnowledgeNode>, NodeRelationshipQueryTransform>();
-        services.AddScoped<IPathResolutionRepository, PathResolutionRepository>();
+        services.AddScoped<ForwardNodeRelationshipQueryTransform>();
+        services.AddScoped<BackwardNodeRelationshipQueryTransform>();
+        services.AddScoped<IPathResolutionRepository>(sp => new PathResolutionRepository(
+            sp.GetRequiredService<IAppDbContext>(),
+            sp.GetRequiredService<IPathExpressionParser>(),
+            sp.GetRequiredService<ITerminalResolverFactory>(),
+            sp.GetRequiredService<ForwardNodeRelationshipQueryTransform>(),
+            sp.GetRequiredService<BackwardNodeRelationshipQueryTransform>()));
         return services;
     }
 }

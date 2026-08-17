@@ -1,0 +1,11 @@
+{
+  "request": [
+    { "nodeId": "66666666-6666-6666-6666-666666666666", "paths": ["<ZZKarateResolveLocatedIn_canonicalName"] }
+  ],
+  "response": [
+    {
+      "nodeId": "66666666-6666-6666-6666-666666666666",
+      "properties": { "<ZZKarateResolveLocatedIn_canonicalName": "ZZ_Karate_Resolve_IsolatedNode" }
+    }
+  ]
+}

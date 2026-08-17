@@ -5,8 +5,8 @@ namespace MnemoToad.Knowledge.Data.PathResolution;
 
 public class PathExpressionParser : IPathExpressionParser
 {
-    private static readonly Regex FullPattern = new(@"^(?:>[^>_.#]+)*(?<marker>[_.#])(?<name>[^>_.#]+)$", RegexOptions.Compiled);
-    private static readonly Regex EdgePattern = new(@">([^>_.#]+)", RegexOptions.Compiled);
+    private static readonly Regex FullPattern = new(@"^(?:[<>][^<>_.#]+)*(?<marker>[_.#])(?<name>[^<>_.#]+)$", RegexOptions.Compiled);
+    private static readonly Regex EdgePattern = new(@"(?<dir>[<>])(?<name>[^<>_.#]+)", RegexOptions.Compiled);
 
     public bool TryParse(string path, out PathExpression? expression)
     {
@@ -17,7 +17,9 @@ public class PathExpressionParser : IPathExpressionParser
             return false;
         }
 
-        var edges = EdgePattern.Matches(path).Select(m => m.Groups[1].Value).ToList();
+        var edges = EdgePattern.Matches(path)
+            .Select(m => new PathEdge(m.Groups["name"].Value, m.Groups["dir"].Value == ">" ? PathEdgeDirection.Forward : PathEdgeDirection.Backward))
+            .ToList();
         var kind = match.Groups["marker"].Value switch
         {
             "_" => PathTerminalKind.Column,

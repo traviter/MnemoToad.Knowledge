@@ -14,15 +14,18 @@ public class PathResolutionRepository : IPathResolutionRepository
     private readonly IAppDbContext _db;
     private readonly IPathExpressionParser _parser;
     private readonly ITerminalResolverFactory _terminalResolverFactory;
-    private readonly IQueryTransform<KnowledgeNode, KnowledgeNode> _edgeQueryTransform;
+    private readonly IQueryTransform<KnowledgeNode, KnowledgeNode> _forwardEdgeQueryTransform;
+    private readonly IQueryTransform<KnowledgeNode, KnowledgeNode> _backwardEdgeQueryTransform;
 
     public PathResolutionRepository(IAppDbContext db, IPathExpressionParser parser, ITerminalResolverFactory terminalResolverFactory,
-        IQueryTransform<KnowledgeNode, KnowledgeNode> edgeQueryTransform)
+        IQueryTransform<KnowledgeNode, KnowledgeNode> forwardEdgeQueryTransform,
+        IQueryTransform<KnowledgeNode, KnowledgeNode> backwardEdgeQueryTransform)
     {
         _db = db;
         _parser = parser;
         _terminalResolverFactory = terminalResolverFactory;
-        _edgeQueryTransform = edgeQueryTransform;
+        _forwardEdgeQueryTransform = forwardEdgeQueryTransform;
+        _backwardEdgeQueryTransform = backwardEdgeQueryTransform;
     }
 
     public async Task<List<ResolvedPath>> ResolveAsync(IReadOnlyList<PathResolutionQuery> queries)
@@ -49,11 +52,14 @@ public class PathResolutionRepository : IPathResolutionRepository
         };
     }
 
-    private IQueryable<KnowledgeNode> TraversePathToNode(Guid startingNodeId, IReadOnlyList<string> edges)
+    private IQueryable<KnowledgeNode> TraversePathToNode(Guid startingNodeId, IReadOnlyList<PathEdge> edges)
     {
         IQueryable<KnowledgeNode> currentNode = _db.KnowledgeNode.AsNoTracking().Where(n => n.Id == startingNodeId);
         foreach (var edge in edges)
-            currentNode = _edgeQueryTransform.Transform(currentNode, edge);
+        {
+            var transform = edge.Direction == PathEdgeDirection.Forward ? _forwardEdgeQueryTransform : _backwardEdgeQueryTransform;
+            currentNode = transform.Transform(currentNode, edge.Name);
+        }
         return currentNode;
     }
 }

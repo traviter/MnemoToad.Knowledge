@@ -28,6 +28,14 @@ public class ValidPathExpressionAttributeTests
     }
 
     [Test]
+    public void IsValid_BackwardEdgePath_ReturnsTrue()
+    {
+        var result = _attribute.IsValid(new List<string> { "<capital_canonicalName" });
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
     public void IsValid_EmptyList_ReturnsTrue()
     {
         // MinLength owns rejecting an empty list; this attribute only cares about syntax.

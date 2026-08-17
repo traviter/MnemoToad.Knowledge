@@ -18,7 +18,8 @@ public class PathResolutionRepositoryTests
     public void SetUp()
     {
         _db = new MockableAppDbContext();
-        _repository = new PathResolutionRepository(_db, new PathExpressionParser(), new TerminalResolverFactory(_db), new NodeRelationshipQueryTransform(_db));
+        _repository = new PathResolutionRepository(_db, new PathExpressionParser(), new TerminalResolverFactory(_db),
+            new ForwardNodeRelationshipQueryTransform(_db), new BackwardNodeRelationshipQueryTransform(_db));
     }
 
     [TearDown]
@@ -209,6 +210,21 @@ public class PathResolutionRepositoryTests
     }
 
     [Test]
+    public async Task ResolveAsync_OneEdgeBackwardViaName_FollowsToSourceNode()
+    {
+        var nodeType = await _db.CreateNodeTypeAsync();
+        var source = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "France");
+        var target = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "Paris");
+        var relationshipType = await _db.CreateRelationshipTypeAsync(name: "capital");
+        await _db.CreateKnowledgeRelationAsync(source.Id, relationshipType.Id, target.Id);
+
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(target.Id, "<capital_canonicalName"));
+
+        Assert.That(result.Error, Is.Null);
+        Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("France"));
+    }
+
+    [Test]
     public async Task ResolveAsync_TwoEdgeChain_ResolvesAcrossBothRelations()
     {
         var nodeType = await _db.CreateNodeTypeAsync();
@@ -223,6 +239,24 @@ public class PathResolutionRepositoryTests
 
         Assert.That(result.Error, Is.Null);
         Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("France"));
+    }
+
+    [Test]
+    public async Task ResolveAsync_MixedDirectionTwoEdgeChain_ResolvesAcrossBothRelations()
+    {
+        var nodeType = await _db.CreateNodeTypeAsync();
+        var country = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
+        var capital = await _db.CreateKnowledgeNodeAsync(nodeType.Id);
+        var landmark = await _db.CreateKnowledgeNodeAsync(nodeType.Id, canonicalName: "Eiffel Tower");
+        var capitalOf = await _db.CreateRelationshipTypeAsync(name: "capital");
+        var locatedIn = await _db.CreateRelationshipTypeAsync(name: "locatedIn");
+        await _db.CreateKnowledgeRelationAsync(country.Id, capitalOf.Id, capital.Id);
+        await _db.CreateKnowledgeRelationAsync(landmark.Id, locatedIn.Id, capital.Id);
+
+        var result = await _repository.ResolveAsync(new PathResolutionQuery(country.Id, ">capital<locatedIn_canonicalName"));
+
+        Assert.That(result.Error, Is.Null);
+        Assert.That(result.Value!.GetValue<string>(), Is.EqualTo("Eiffel Tower"));
     }
 
     [Test]
