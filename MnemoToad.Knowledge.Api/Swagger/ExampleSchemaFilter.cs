@@ -6,10 +6,8 @@ using MnemoToad.Knowledge.Data.Entities;
 
 namespace MnemoToad.Knowledge.Api.Swagger;
 
-/// <summary>
-/// Attaches a sample JSON payload to specific request/response types in the generated Swagger
-/// schema. Add an entry here (not a per-type attribute/class) whenever a new type needs one.
-/// </summary>
+// Attaches a sample JSON payload to specific request/response types in the generated Swagger
+// schema. Add an entry here (not a per-type attribute/class) whenever a new type needs one.
 public class ExampleSchemaFilter : ISchemaFilter
 {
     private static readonly Dictionary<Type, Func<JsonNode>> Examples = new()
