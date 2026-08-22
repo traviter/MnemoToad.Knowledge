@@ -2,9 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace MnemoToad.Knowledge.Data.DbUtil;
 
-public interface IEntityJsonMapper<TEntity>
+public interface IEntityJsonMapper<TEntity> : IJsonMapper<TEntity>
 {
-    JsonObject ToJson(TEntity entity);
-
     void UpdateFromJson(TEntity entity, JsonObject json);
 }
